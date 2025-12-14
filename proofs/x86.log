@@ -1,0 +1,15 @@
+#E0 s2 start
+#E0 a20 ok
+#E0 kernel load ok
+#E0 prot32 copy ok
+#E0 paging on
+#E0 long ok
+#E1 handoff base=0000000000100000 len=0000000000004730 mem=0000000004000000 cons=0000000000000003
+#E3/E4 CG proof: qos=00000300 cg_crc=77E6C89C
+#E5 ORG proof: mito=A081F38D golgi=B22C5A2E
+#E6 EVT proof: delivered=00000027 evt_hash=7FA811DB
+#E7 UPD proof: old_sha=05BEDA72 new_sha=212CEADD
+#E8 OBS proof: entries=00000000 obs_hash=344EA0C9
+#E9 SEC proof: key=00000001 mac16=0DD630A1
+#E10 RELEASE proof: tag=74628A35 build=00000000
+FULL PROOF SUCCESS

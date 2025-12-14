@@ -1,0 +1,8 @@
+dafff9427158d1b74a0f2d92a3cba1d5608409fc48376ab04c9bbac7443ead19           168  BUILDINFO.json
+5db64a74057019ab99bca7bd511e31634b1efd48e76c4c43a3d3c3b51898a4fe            95  MANIFEST.txt
+16f86fe684417f5b8a745d79b81fcfe0fd0827f1fe540fba7a104c5e101fbcdf         28400  cellos-arm64.elf
+a9de2b2702823028e2b409cc229526ca1f05c63cad91a0ecae15b9310ec98e7c         35840  cellos-x86_bios.img
+dc6fc905ecf5ccb16c93f60c61cecbb04e6477a896c3b17608abf9227d381377         18550  cellos-﻿1.0.0-eukaryote-spine.tar.gz
+dc6fc905ecf5ccb16c93f60c61cecbb04e6477a896c3b17608abf9227d381377         18550  release.tar.gz
+f1843f755260fed5b2ded93a06c8e7820dd276cbb68e812757a3376adf42ede0           166  arm64.virt.pl011.pbin
+c1a0c473a6108d157916b9a8c3e72b706caca4446b4a82eaf3b7dcef9e3f60bf           166  x86_bios.minimal.pbin

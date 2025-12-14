@@ -1,0 +1,24 @@
+version: "1.0.0"
+arch: "x86_64"
+device_graph:
+  nodes:
+    - { id: "cpu",  type: "X86_64" }
+    - { id: "vga",  type: "VGA-TEXT" }
+    - { id: "com1", type: "COM1", addr: "0x3F8" }
+    - { id: "pit",  type: "PIT" }
+    - { id: "rtc",  type: "RTC" }
+    - { id: "ahci", type: "AHCI" }
+  edges:
+    - { from: "cpu", to: "vga" }
+    - { from: "cpu", to: "com1" }
+    - { from: "cpu", to: "ahci" }
+channels:
+  - { id: 0, name: "log",    verbs: ["write"],        qos: "BE", priority: 1, refill_per_tick: 2048, bucket_max: 4096 }
+  - { id: 1, name: "time",   verbs: ["read"],         qos: "RT", priority: 0, refill_per_tick:  256, bucket_max:  256 }
+  - { id: 2, name: "block",  verbs: ["read","write"], qos: "BE", priority: 2, refill_per_tick: 4096, bucket_max: 8192 }
+  - { id: 3, name: "serial", verbs: ["write"],        qos: "BE", priority: 1, refill_per_tick: 1024, bucket_max: 2048 }
+schedules:
+  quantum_ns: 100000
+signatures:
+  author: "dev.local"
+  root:   "root.local"

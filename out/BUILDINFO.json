@@ -1,0 +1,8 @@
+{
+  "version": "1.0.0-eukaryote-spine",
+  "source_date_epoch": 1700000000,
+  "toolchain": {
+    "cc": "13.3.0",
+    "ld": "GNU ld (GNU Binutils for Ubuntu) 2.42"
+  }
+}

@@ -1,0 +1,21 @@
+version: "1.0.0"
+arch: "arm64"
+device_graph:
+  nodes:
+    - { id: "cpu",   type: "ARM64" }
+    - { id: "uart0", type: "PL011", addr: "0x09000000" }
+    - { id: "timer", type: "ARCH_TIMER" }
+    - { id: "vblk",  type: "VIRTIO-BLK" }
+  edges:
+    - { from: "cpu", to: "uart0" }
+    - { from: "cpu", to: "vblk" }
+channels:
+  - { id: 0, name: "log",    verbs: ["write"],        qos: "BE", priority: 1, refill_per_tick: 2048, bucket_max: 4096 }
+  - { id: 1, name: "time",   verbs: ["read"],         qos: "RT", priority: 0, refill_per_tick:  256, bucket_max:  256 }
+  - { id: 2, name: "block",  verbs: ["read","write"], qos: "BE", priority: 2, refill_per_tick: 4096, bucket_max: 8192 }
+  - { id: 3, name: "serial", verbs: ["write"],        qos: "BE", priority: 1, refill_per_tick: 1024, bucket_max: 2048 }
+schedules:
+  quantum_ns: 100000
+signatures:
+  author: "dev.local"
+  root:   "root.local"
