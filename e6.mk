@@ -1,4 +1,8 @@
-#E6: Interrupt > Event Bridge
+# Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
+# SPDX-License-Identifier: MIT
+# Licensed under the MIT License. See LICENSE in project root.
+# E6: Interrupt > Event Bridge
+
 IRQ_OBJS := build/irq_bridge.o build/events.o
 TEST_IRQ := build/test_irq_flood build/test_irq_order
 

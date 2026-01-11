@@ -1,3 +1,7 @@
+# Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
+# SPDX-License-Identifier: MIT
+# Licensed under the MIT License. See LICENSE in project root.
+
 CC ?= gcc
 AARCH64_CC ?= aarch64-linux-gnu-gcc
 LD ?= ld

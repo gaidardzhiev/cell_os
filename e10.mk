@@ -1,4 +1,8 @@
-﻿OUT ?= ../out
+﻿# Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
+# SPDX-License-Identifier: MIT
+# Licensed under the MIT License. See LICENSE in project root.
+
+OUT ?= ../out
 PHO := $(OUT)/phenos
 SOURCE_DATE_EPOCH ?= 1700000000
 

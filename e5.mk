@@ -1,4 +1,8 @@
-#E5: Org Pack v1
+# Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
+# SPDX-License-Identifier: MIT
+# Licensed under the MIT License. See LICENSE in project root.
+# E5: Org Pack v1
+
 ORG_SRCS ?= $(ORG_COMMON_SRCS)
 ORG_HDRS ?= $(ORG_COMMON_HDRS)
 ORG_OBJS ?= $(ORG_COMMON_OBJS)

@@ -1,3 +1,7 @@
+# Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
+# SPDX-License-Identifier: MIT
+# Licensed under the MIT License. See LICENSE in project root.
+
 PY ?= python3
 
 PHENO_SRC := phenotypes/x86_bios.minimal.yaml phenotypes/arm64.virt.pl011.yaml

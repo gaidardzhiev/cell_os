@@ -1,4 +1,8 @@
-#E8 Observability v2 (core) ???
+# Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
+# SPDX-License-Identifier: MIT
+# Licensed under the MIT License. See LICENSE in project root.
+# E8 Observability v2 (core) ???
+
 OBS_OBJS := build/obs.o build/obs_trace.o
 
 build/obs.o: src/core/obs.c include/core/obs.h include/abi/msg.h include/core/parcel.h

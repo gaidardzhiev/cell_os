@@ -1,4 +1,8 @@
-#E7: Update/Rollback v2 + Migration Gene
+# Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
+# SPDX-License-Identifier: MIT
+# Licensed under the MIT License. See LICENSE in project root.
+# E7: Update/Rollback v2 + Migration Gene
+
 UPDATE_OBJ := build/update.o
 TEST_UPDATE := build/test_update
 TEST_MIGRATE := build/test_migrate
