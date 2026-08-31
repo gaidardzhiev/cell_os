@@ -145,28 +145,28 @@ Keeping model weights separate from the kernel is intentional. The kernel remain
 
 The original Cell OS subsystems remain in place. The Cortex work extends the tree rather than replacing it.
 
-- `src/boot/` — BIOS first and second stages, long-mode transition, substrate preparation, and Cortex boot metadata.
-- `src/kernel/` — kernel entry, runtime support, Cortex bootstrap, console path, and linker scripts.
-- `include/core/handoff.h` and related substrate headers — pinned boot and substrate metadata.
-- `src/core/channel_graph.c` and `include/core/channel.h` — channel QoS and adjacency graph.
-- `src/core/qos.c` and `src/core/scheduler.c` — token-bucket QoS, GAS accounting, and gene scheduling hooks.
-- `src/core/organelles.c` and `src/genes/` — organelle services and gene behaviors.
-- `src/core/irq_bridge.c` and `src/core/events.c` — interrupt-to-event conversion.
-- `src/core/log_ring.c`, `src/core/ch0_log.c`, `src/core/obs.c`, and `src/core/obs_trace.c` — observability and replay-oriented logging.
-- `src/core/update.c` — dual-strand update and migration logic.
-- `libparcel/parcel.c` — parcel framing shared by target and host tooling.
-- `src/core/mem_arena.c` — bounded memory arena used by Cortex and other native allocations.
-- `src/drivers/x86/ata_pio.c` — current x86 ATA PIO path used to load the model payload.
-- `src/cortex/cwm.c` — CWM1 parser and model validation.
-- `src/cortex/cortex.c` — native causal transformer inference implementation.
-- `src/kernel/cortex_boot.c` — Cortex model loading and interactive execution path.
-- `tools/celllm_train.py` — CellLM-1M PyTorch training and CWM1 export tool.
-- `tests/test_cortex_host.c` — native host-side CWM1/Cortex inference test.
-- `models/` — exported CWM checkpoints and model metadata.
-- `data/` — current CellLM training corpus.
-- `checkpoints/` — development training checkpoints where retained intentionally.
-- `tools/phenotype_compile.py`, `tools/gen_cgf.py`, `tools/obs_replay.c`, and `tools/verify_proofs.sh` — original phenotype, CGF, observability, and proof tooling.
-- `phenotypes/`, `schemas/`, `proofs/`, `out/`, and `build/` — original configuration, validation, release, and scratch paths.
+- `src/boot/`  BIOS first and second stages, long-mode transition, substrate preparation, and Cortex boot metadata.
+- `src/kernel/`  kernel entry, runtime support, Cortex bootstrap, console path, and linker scripts.
+- `include/core/handoff.h` and related substrate headers  pinned boot and substrate metadata.
+- `src/core/channel_graph.c` and `include/core/channel.h`  channel QoS and adjacency graph.
+- `src/core/qos.c` and `src/core/scheduler.c`  token-bucket QoS, GAS accounting, and gene scheduling hooks.
+- `src/core/organelles.c` and `src/genes/`  organelle services and gene behaviors.
+- `src/core/irq_bridge.c` and `src/core/events.c`  interrupt-to-event conversion.
+- `src/core/log_ring.c`, `src/core/ch0_log.c`, `src/core/obs.c`, and `src/core/obs_trace.c`  observability and replay-oriented logging.
+- `src/core/update.c`  dual-strand update and migration logic.
+- `libparcel/parcel.c`  parcel framing shared by target and host tooling.
+- `src/core/mem_arena.c`  bounded memory arena used by Cortex and other native allocations.
+- `src/drivers/x86/ata_pio.c`  current x86 ATA PIO path used to load the model payload.
+- `src/cortex/cwm.c`  CWM1 parser and model validation.
+- `src/cortex/cortex.c`  native causal transformer inference implementation.
+- `src/kernel/cortex_boot.c`  Cortex model loading and interactive execution path.
+- `tools/celllm_train.py`  CellLM-1M PyTorch training and CWM1 export tool.
+- `tests/test_cortex_host.c`  native host-side CWM1/Cortex inference test.
+- `models/`  exported CWM checkpoints and model metadata.
+- `data/`  current CellLM training corpus.
+- `checkpoints/`  development training checkpoints where retained intentionally.
+- `tools/phenotype_compile.py`, `tools/gen_cgf.py`, `tools/obs_replay.c`, and `tools/verify_proofs.sh`  original phenotype, CGF, observability, and proof tooling.
+- `phenotypes/`, `schemas/`, `proofs/`, `out/`, and `build/`  original configuration, validation, release, and scratch paths.
 
 ## Build and Run
 
