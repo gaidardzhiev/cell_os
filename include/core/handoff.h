@@ -1,21 +1,17 @@
-/*
-* Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
-* SPDX-License-Identifier: MIT
-*
-* This file is licensed under the MIT License.
-* See the LICENSE file in the project root for full license text.
-*/
-
 #pragma once
 #include <stdint.h>
-#include <spec/cgf_substrate_e0.h>
 
-typedef struct {
+/* ABI-compatible prefix and total size of Cell OS handoff_t at base commit.
+ * Cortex uses only the first five qwords; the final 128 bytes remain reserved
+ * for the existing substrate descriptor.
+ */
+typedef struct __attribute__((packed)) {
 	uint64_t phys_base;
 	uint64_t phys_len;
 	uint64_t mem_top;
-	uint64_t console_flags;
+	uint64_t flags;
 	uint64_t reserved;
-	cgf_substrate_info_t substrate;
+	uint8_t substrate[128];
 } handoff_t;
-_Static_assert(sizeof(handoff_t) == 168, "handoff_t must stay 168 bytes");
+
+_Static_assert(sizeof(handoff_t) == 168, "Cell OS handoff ABI must remain 168 bytes");

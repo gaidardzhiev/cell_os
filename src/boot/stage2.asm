@@ -1,19 +1,14 @@
+; Cell OS stage2, Cortex branch
+; Based on cell_os commit 515d65c738e17163fe9419d75f4841aefefc32ef
 ; Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
 ; SPDX-License-Identifier: MIT
-;
-; This file is licensed under the MIT License.
-; See the LICENSE file in the project root for full license text.
-
 BITS 16
-%ifidn __OUTPUT_FORMAT__,bin
 org 0x8000
-%endif
 
 %define E9_PORT 0xE9
 %define COM1_PORT 0x3F8
-%define COM1_PORT 0x3F8
 %define STACK_TOP 0x98000
-%define IDENT_LIMIT_MB 64
+%define IDENT_LIMIT_MB 1024
 %define KERNEL_LOAD_ADDR 0x00100000
 %define KERNEL_VIRT_ADDR 0xFFFFFFFF80100000
 %define KERNEL_PML4_HIGH (511*8)
@@ -21,15 +16,9 @@ org 0x8000
 %define KERNEL_STAGE_ADDR 0x00020000
 %define KERNEL_STAGE_SEG (KERNEL_STAGE_ADDR >> 4)
 %define KERNEL_STAGE_OFF (KERNEL_STAGE_ADDR & 0xF)
-%define CGF_STAGE_ADDR    0x00030000
-%define CGF_STAGE_SEG (CGF_STAGE_ADDR >> 4)
-%define CGF_STAGE_OFF (CGF_STAGE_ADDR & 0xF)
-
-%ifdef CFG_ENABLE_CGF_VERIFY
-extern cgf2_verify_and_log
-%endif
-
-global start16
+%define E820_MAP_ADDR 0x5000
+%define BOOT_EXT_ADDR 0x5400
+%define MAX_E820_ENTRIES 32
 
 %macro OUTDBG 1
 	mov dx, E9_PORT
@@ -41,8 +30,15 @@ global start16
 
 start16:
 	cli
+	xor ax, ax
+	mov ds, ax
+	mov es, ax
+	mov ss, ax
 	mov [boot_drive_s2], dl
 	cld
+	call collect_e820
+
+	; COM1: 115200 8N1, FIFO on.
 	mov dx, COM1_PORT + 1
 	xor al, al
 	out dx, al
@@ -64,13 +60,17 @@ start16:
 	mov dx, COM1_PORT + 4
 	mov al, 0x0B
 	out dx, al
+
 	mov si, msg_s2
 	call log_str16
-	in   al, 0x92
-	or   al, 00000010b
-	out  0x92, al
+
+	in al, 0x92
+	or al, 00000010b
+	out 0x92, al
 	mov si, msg_a20
 	call log_str16
+
+	; Load the packed kernel to a low staging buffer while BIOS services exist.
 	mov si, dap3
 	mov ah, 0x42
 	mov dl, [boot_drive_s2]
@@ -78,16 +78,10 @@ start16:
 	jc load_fail
 	mov si, msg_kernel
 	call log_str16
-%ifdef CFG_ENABLE_CGF_VERIFY
-	mov si, dap_cgf
-	mov ah, 0x42
-	mov dl, [boot_drive_s2]
-	int 0x13
-	jc cgf_load_fail
-%endif
+
 	lgdt [gdt_desc]
 	mov eax, cr0
-	or  eax, 1
+	or eax, 1
 	mov cr0, eax
 	jmp 08h:prot32
 
@@ -96,12 +90,32 @@ load_fail:
 	call log_str16
 	jmp $
 
-%ifdef CFG_ENABLE_CGF_VERIFY
-cgf_load_fail:
-	mov si, msg_cgf_fail
-	call log_str16
-	jmp $
-%endif
+collect_e820:
+	pushad
+	xor ebx, ebx
+	mov di, E820_MAP_ADDR
+	xor bp, bp
+.e820_loop:
+	cmp bp, MAX_E820_ENTRIES
+	jae .e820_done
+	mov eax, 0xE820
+	mov edx, 0x534D4150
+	mov ecx, 24
+	mov dword [es:di+20], 1
+	int 0x15
+	jc .e820_done
+	cmp eax, 0x534D4150
+	jne .e820_done
+	cmp ecx, 20
+	jb .e820_done
+	add di, 24
+	inc bp
+	test ebx, ebx
+	jnz .e820_loop
+.e820_done:
+	mov [e820_count], bp
+	popad
+	ret
 
 log_str16:
 	pusha
@@ -123,18 +137,26 @@ prot32:
 	mov ss, ax
 	mov esp, 0x90000
 	cld
+
+	; Enable native x87/SSE state. Cortex currently uses an SSE2 matvec path.
 	mov eax, cr0
-	or  eax, (1<<1) | (1<<5)
+	and eax, 0xFFFFFFF3       ; clear EM and TS
+	or eax, (1<<1) | (1<<5)  ; MP and NE
 	mov cr0, eax
+
 	mov esi, KERNEL_STAGE_ADDR
 	mov edi, KERNEL_LOAD_ADDR
 	mov ecx, dword [kernel_bytes]
 	rep movsb
 	mov esi, msg_prot32
 	call log_str32
+
 	mov eax, cr4
-	or  eax, (1<<5) | (1<<9) | (1<<10)
+	or eax, (1<<5) | (1<<9) | (1<<10) ; PAE, OSFXSR, OSXMMEXCPT
 	mov cr4, eax
+
+	; One PML4 + one PDPT + one 2 MiB page directory maps 0..1 GiB,
+	; and aliases the same physical range at the Cell OS high-half address.
 	mov edi, pml4
 	xor eax, eax
 	mov ecx, (4096*3)/4
@@ -156,12 +178,13 @@ prot32:
 	mov edi, pd
 .fill_pd:
 	mov eax, ebx
-	or  eax, 0x083
+	or eax, 0x083
 	mov [edi], eax
 	mov dword [edi+4], 0
 	add edi, 8
 	add ebx, 0x200000
 	loop .fill_pd
+
 	mov eax, pml4
 	mov cr3, eax
 	mov ecx, 0xC0000080
@@ -195,20 +218,61 @@ long64:
 	mov es, ax
 	mov ss, ax
 	mov rsp, STACK_TOP
-	mov rbx, 0x0000000000108000
-	mov rax, 0x1122334455667788
-	mov [rbx], rax
-	mov rax, [rbx]
 	lea rsi, [rel msg_long]
 	call log_str64
-%ifdef CFG_ENABLE_CGF_VERIFY
-	mov rdi, CGF_STAGE_ADDR
-	mov rsi, [cgf_bytes]
-	call cgf2_verify_and_log
-	test eax, eax
-	jnz .hang
-%endif
-	
+
+	; Highest usable E820 end that is reachable by our current 1 GiB map.
+	xor r8, r8
+	movzx rcx, word [e820_count]
+	mov rsi, E820_MAP_ADDR
+.mem_scan:
+	test rcx, rcx
+	jz .mem_done
+	cmp dword [rsi+16], 1
+	jne .mem_next
+	mov rax, [rsi+0]
+	mov rdx, [rsi+8]
+	add rax, rdx
+	jc .mem_next
+	cmp rax, r8
+	jbe .mem_next
+	mov r8, rax
+.mem_next:
+	add rsi, 24
+	dec rcx
+	jmp .mem_scan
+.mem_done:
+	test r8, r8
+	jnz .mem_have
+	mov r8, 0x04000000
+.mem_have:
+	cmp r8, 0x40000000
+	jbe .mem_capped
+	mov r8, 0x40000000
+.mem_capped:
+
+	; Optional extension pointed to by handoff.reserved.  The frozen 168-byte
+	; handoff ABI itself is unchanged.
+	mov rdi, BOOT_EXT_ADDR
+	xor rax, rax
+	mov rcx, 6
+	rep stosq
+	mov dword [BOOT_EXT_ADDR+0], 0x31584243 ; CBX1
+	mov word  [BOOT_EXT_ADDR+4], 1
+	mov word  [BOOT_EXT_ADDR+6], 48
+	mov qword [BOOT_EXT_ADDR+8], E820_MAP_ADDR
+	movzx eax, word [e820_count]
+	mov dword [BOOT_EXT_ADDR+16], eax
+	mov dword [BOOT_EXT_ADDR+20], 24
+	mov rax, [model_lba]
+	mov [BOOT_EXT_ADDR+24], rax
+	mov rax, [model_bytes]
+	mov [BOOT_EXT_ADDR+32], rax
+	test rax, rax
+	jz .no_model
+	mov dword [BOOT_EXT_ADDR+40], 1
+.no_model:
+
 	sub rsp, 168
 	xor rax, rax
 	mov rcx, 21
@@ -217,13 +281,15 @@ long64:
 	mov qword [rsp+0], KERNEL_LOAD_ADDR
 	mov rax, [kernel_bytes]
 	mov [rsp+8], rax
-	mov qword [rsp+16], 0x0000000004000000 
-	mov qword [rsp+24], 0x0000000000000003 
-	mov qword [rsp+32], 0
+	mov [rsp+16], r8
+	mov qword [rsp+24], 0x0000000000000003
+	mov qword [rsp+32], BOOT_EXT_ADDR
 	mov rdi, rsp
+
+	; 168-byte handoff leaves rsp%16==8. Restore SysV pre-call alignment.
+	sub rsp, 8
 	mov rax, KERNEL_VIRT_ADDR
 	call rax
-
 .hang:
 	hlt
 	jmp .hang
@@ -243,42 +309,29 @@ gdt_desc:
 align 4096
 pml4: times 512 dq 0
 pdpt: times 512 dq 0
-pd:   times 512 dq 0
+pd: times 512 dq 0
 
 boot_drive_s2: db 0
+e820_count: dw 0
 
 dap3:
 	db 16, 0
-dap3_secs:   dw 0x5AA5
-dap3_buf_off dw KERNEL_STAGE_OFF
-dap3_buf_seg dw KERNEL_STAGE_SEG
-dap3_lba:    dq 0x8877665544332211
-
-%ifdef CFG_ENABLE_CGF_VERIFY
-dap_cgf:
-	db 16, 0
-cgf_secs:    dw 0xACE1
-cgf_buf_off  dw CGF_STAGE_OFF
-cgf_buf_seg  dw CGF_STAGE_SEG
-cgf_lba:     dq 0x445566778899AABB
-%endif
+dap3_secs: dw 0x5AA5
+dap3_buf_off: dw KERNEL_STAGE_OFF
+dap3_buf_seg: dw KERNEL_STAGE_SEG
+dap3_lba: dq 0x8877665544332211
 
 kernel_bytes: dq 0xCAFEBABEDEADBEEF
-%ifdef CFG_ENABLE_CGF_VERIFY
-cgf_bytes:    dq 0x0BADC0DED15EA5ED
-%endif
+model_lba: dq 0x13579BDF2468ACE0
+model_bytes: dq 0x0F1E2D3C4B5A6978
 
-msg_s2:     db "#E0 s2 start", 10, 0
-msg_a20:    db "#E0 a20 ok", 10, 0
+msg_s2: db "#E0 s2 start", 10, 0
+msg_a20: db "#E0 a20 ok", 10, 0
 msg_kernel: db "#E0 kernel load ok", 10, 0
-msg_long:   db "#E0 long ok", 10, 0
+msg_long: db "#E0 long ok", 10, 0
 msg_prot32: db "#E0 prot32 copy ok", 10, 0
 msg_paging: db "#E0 paging on", 10, 0
-
 msg_load_fail: db "#E0 load fail", 10, 0
-%ifdef CFG_ENABLE_CGF_VERIFY
-msg_cgf_fail:  db "#A! cgf load fail", 10, 0
-%endif
 
 log_str64:
 	push rax

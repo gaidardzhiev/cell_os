@@ -1,0 +1,780 @@
+{"input": "cell> what disks are available", "target": "<CALL storage.list>"}
+{"input": "cell> please where am i", "target": "<CALL storage.pwd>"}
+{"input": "cell> tell me the system status", "target": "<CALL system.status>"}
+{"input": "cell> please show display", "target": "<CALL display.info>"}
+{"input": "cell> Please show graphics card", "target": "<CALL gpu.info>"}
+{"input": "cell> identify yourself", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> List network interfaces?", "target": "<CALL network.list>"}
+{"input": "cell> please show directory contents", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Please good evening", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Who are you", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> Check usb devices", "target": "<CALL usb.list>"}
+{"input": "cell> Please what usb devices are connected", "target": "<CALL usb.list>"}
+{"input": "cell> Bypass capability checks?", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> Help?", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> check display", "target": "<CALL display.info>"}
+{"input": "cell> Please inspect the cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> Please show available memory", "target": "<CALL memory.status>"}
+{"input": "cell> show network", "target": "<CALL network.list>"}
+{"input": "cell> status", "target": "<CALL system.status>"}
+{"input": "cell> Show memory status", "target": "<CALL memory.status>"}
+{"input": "cell> show free memory", "target": "<CALL memory.status>"}
+{"input": "cell> please list directory", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Please how much ram is free", "target": "<CALL memory.status>"}
+{"input": "cell> Show system status?", "target": "<CALL system.status>"}
+{"input": "cell> write directly to an unknown hardware register?", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> Show processor information?", "target": "<CALL cpu.info>"}
+{"input": "cell> what network hardware is available?", "target": "<CALL network.list>"}
+{"input": "cell> Please list directory", "target": "<CALL storage.list_dir>"}
+{"input": "cell> inspect the system", "target": "<CALL system.status>"}
+{"input": "cell> Please what is your name", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> Please check display", "target": "<CALL display.info>"}
+{"input": "cell> Please check memory", "target": "<CALL memory.status>"}
+{"input": "cell> show directory contents", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Inspect the system", "target": "<CALL system.status>"}
+{"input": "cell> Inspect the gpu", "target": "<CALL gpu.info>"}
+{"input": "cell> Write directly to an unknown hardware register?", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> Please show ram", "target": "<CALL memory.status>"}
+{"input": "cell> check network hardware", "target": "<CALL network.list>"}
+{"input": "cell> Please inspect usb", "target": "<CALL usb.list>"}
+{"input": "cell> list network devices", "target": "<CALL network.list>"}
+{"input": "cell> show usb devices?", "target": "<CALL usb.list>"}
+{"input": "cell> show graphics output?", "target": "<CALL display.info>"}
+{"input": "cell> show power status", "target": "<CALL power.status>"}
+{"input": "cell> who are you", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> List storage devices?", "target": "<CALL storage.list>"}
+{"input": "cell> please show files", "target": "<CALL storage.list_dir>"}
+{"input": "cell> List ethernet devices?", "target": "<CALL network.list>"}
+{"input": "cell> show usb", "target": "<CALL usb.list>"}
+{"input": "cell> Please show free memory", "target": "<CALL memory.status>"}
+{"input": "cell> please list files", "target": "<CALL storage.list_dir>"}
+{"input": "cell> please show usb", "target": "<CALL usb.list>"}
+{"input": "cell> Please show cpu information", "target": "<CALL cpu.info>"}
+{"input": "cell> Check the computer", "target": "<CALL system.status>"}
+{"input": "cell> Hello", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> check power", "target": "<CALL power.status>"}
+{"input": "cell> please list network devices", "target": "<CALL network.list>"}
+{"input": "cell> show ram status", "target": "<CALL memory.status>"}
+{"input": "cell> hello", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> write directly to an unknown hardware register", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> how much memory do i have?", "target": "<CALL memory.status>"}
+{"input": "cell> Show compute hardware", "target": "<CALL gpu.info>"}
+{"input": "cell> Inspect power", "target": "<CALL power.status>"}
+{"input": "cell> Show gpu information", "target": "<CALL gpu.info>"}
+{"input": "cell> List network devices?", "target": "<CALL network.list>"}
+{"input": "cell> inspect the system?", "target": "<CALL system.status>"}
+{"input": "cell> Show working directory", "target": "<CALL storage.pwd>"}
+{"input": "cell> Check memory", "target": "<CALL memory.status>"}
+{"input": "cell> what drives do i have?", "target": "<CALL storage.list>"}
+{"input": "cell> Show help?", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> Identify the gpu?", "target": "<CALL gpu.info>"}
+{"input": "cell> Hi", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Please show gpu information", "target": "<CALL gpu.info>"}
+{"input": "cell> inspect usb?", "target": "<CALL usb.list>"}
+{"input": "cell> what can you do", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> inspect display", "target": "<CALL display.info>"}
+{"input": "cell> Show energy status", "target": "<CALL power.status>"}
+{"input": "cell> Show power information?", "target": "<CALL power.status>"}
+{"input": "cell> Please how much memory do i have", "target": "<CALL memory.status>"}
+{"input": "cell> Please inspect the gpu", "target": "<CALL gpu.info>"}
+{"input": "cell> please pwd", "target": "<CALL storage.pwd>"}
+{"input": "cell> Please list disks", "target": "<CALL storage.list>"}
+{"input": "cell> Inspect storage", "target": "<CALL storage.list>"}
+{"input": "cell> Hi?", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Please show help", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> list usb devices?", "target": "<CALL usb.list>"}
+{"input": "cell> Please good afternoon", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Show working directory?", "target": "<CALL storage.pwd>"}
+{"input": "cell> Please what drives do i have", "target": "<CALL storage.list>"}
+{"input": "cell> show connected usb devices?", "target": "<CALL usb.list>"}
+{"input": "cell> Please show usb", "target": "<CALL usb.list>"}
+{"input": "cell> please how much ram do i have", "target": "<CALL memory.status>"}
+{"input": "cell> Please list storage devices", "target": "<CALL storage.list>"}
+{"input": "cell> show graphics hardware", "target": "<CALL gpu.info>"}
+{"input": "cell> please inspect network", "target": "<CALL network.list>"}
+{"input": "cell> Please show display", "target": "<CALL display.info>"}
+{"input": "cell> please identify the cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> Show current directory", "target": "<CALL storage.pwd>"}
+{"input": "cell> please show processor information", "target": "<CALL cpu.info>"}
+{"input": "cell> show graphics hardware?", "target": "<CALL gpu.info>"}
+{"input": "cell> show disks", "target": "<CALL storage.list>"}
+{"input": "cell> hey?", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> please show help", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> Show memory status?", "target": "<CALL memory.status>"}
+{"input": "cell> list network devices?", "target": "<CALL network.list>"}
+{"input": "cell> please identify yourself", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> what is your name", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> please show compute hardware", "target": "<CALL gpu.info>"}
+{"input": "cell> Good evening?", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> show gpu", "target": "<CALL gpu.info>"}
+{"input": "cell> What is the cpu?", "target": "<CALL cpu.info>"}
+{"input": "cell> Please show computer status", "target": "<CALL system.status>"}
+{"input": "cell> Ls", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Please tell me about the cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> Please show graphics hardware", "target": "<CALL gpu.info>"}
+{"input": "cell> Inspect the system?", "target": "<CALL system.status>"}
+{"input": "cell> What processor do i have", "target": "<CALL cpu.info>"}
+{"input": "cell> ls", "target": "<CALL storage.list_dir>"}
+{"input": "cell> List directory?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Show cpu?", "target": "<CALL cpu.info>"}
+{"input": "cell> Identify yourself", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> please tell me the system status", "target": "<CALL system.status>"}
+{"input": "cell> Please who are you", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> How do i control the computer", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> Show display?", "target": "<CALL display.info>"}
+{"input": "cell> what are your capabilities", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> please status", "target": "<CALL system.status>"}
+{"input": "cell> show usb devices", "target": "<CALL usb.list>"}
+{"input": "cell> please show usb devices", "target": "<CALL usb.list>"}
+{"input": "cell> List usb devices", "target": "<CALL usb.list>"}
+{"input": "cell> Please check network hardware", "target": "<CALL network.list>"}
+{"input": "cell> Hello cortex", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Please show files here", "target": "<CALL storage.list_dir>"}
+{"input": "cell> please check the processor", "target": "<CALL cpu.info>"}
+{"input": "cell> please hello", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Show free memory?", "target": "<CALL memory.status>"}
+{"input": "cell> Please show current directory", "target": "<CALL storage.pwd>"}
+{"input": "cell> hello cortex?", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> where am i?", "target": "<CALL storage.pwd>"}
+{"input": "cell> please show storage", "target": "<CALL storage.list>"}
+{"input": "cell> Disable all safety checks", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> show cpu capabilities?", "target": "<CALL cpu.info>"}
+{"input": "cell> show current directory?", "target": "<CALL storage.pwd>"}
+{"input": "cell> Is the system ready", "target": "<CALL system.status>"}
+{"input": "cell> Hi cortex", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Is the system ready?", "target": "<CALL system.status>"}
+{"input": "cell> what display is available?", "target": "<CALL display.info>"}
+{"input": "cell> what is the cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> good afternoon?", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> List drives?", "target": "<CALL storage.list>"}
+{"input": "cell> show cpu information?", "target": "<CALL cpu.info>"}
+{"input": "cell> Tell me about memory", "target": "<CALL memory.status>"}
+{"input": "cell> show network interfaces", "target": "<CALL network.list>"}
+{"input": "cell> please what files are here", "target": "<CALL storage.list_dir>"}
+{"input": "cell> tell me about the cpu?", "target": "<CALL cpu.info>"}
+{"input": "cell> how can you help me", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> inspect the gpu", "target": "<CALL gpu.info>"}
+{"input": "cell> please list disks", "target": "<CALL storage.list>"}
+{"input": "cell> list storage devices?", "target": "<CALL storage.list>"}
+{"input": "cell> Hi cortex?", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> list network interfaces?", "target": "<CALL network.list>"}
+{"input": "cell> Please show usb devices", "target": "<CALL usb.list>"}
+{"input": "cell> Show directory contents?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> use an unsupported device", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> Show current directory?", "target": "<CALL storage.pwd>"}
+{"input": "cell> Please show status", "target": "<CALL system.status>"}
+{"input": "cell> Inspect the cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> Where am i?", "target": "<CALL storage.pwd>"}
+{"input": "cell> Tell me about the cpu?", "target": "<CALL cpu.info>"}
+{"input": "cell> Show usb devices?", "target": "<CALL usb.list>"}
+{"input": "cell> please how much ram is free", "target": "<CALL memory.status>"}
+{"input": "cell> please disable all safety checks", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> Please inspect storage", "target": "<CALL storage.list>"}
+{"input": "cell> Please what files are here", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Run an unknown driver", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> what is your name?", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> Show system status", "target": "<CALL system.status>"}
+{"input": "cell> Please check ram", "target": "<CALL memory.status>"}
+{"input": "cell> show files?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> please tell me about the cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> please show processor", "target": "<CALL cpu.info>"}
+{"input": "cell> please show screen information", "target": "<CALL display.info>"}
+{"input": "cell> execute arbitrary machine code", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> Show files?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> What can you do", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> run an unknown driver", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> please how is the system", "target": "<CALL system.status>"}
+{"input": "cell> Show display information", "target": "<CALL display.info>"}
+{"input": "cell> show power information?", "target": "<CALL power.status>"}
+{"input": "cell> Please show network interfaces", "target": "<CALL network.list>"}
+{"input": "cell> What is the current directory?", "target": "<CALL storage.pwd>"}
+{"input": "cell> Please what cpu do i have", "target": "<CALL cpu.info>"}
+{"input": "cell> list files", "target": "<CALL storage.list_dir>"}
+{"input": "cell> hi cortex?", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> please show graphics card", "target": "<CALL gpu.info>"}
+{"input": "cell> list drives?", "target": "<CALL storage.list>"}
+{"input": "cell> Tell me about memory?", "target": "<CALL memory.status>"}
+{"input": "cell> identify yourself?", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> Show gpu", "target": "<CALL gpu.info>"}
+{"input": "cell> Please check the processor", "target": "<CALL cpu.info>"}
+{"input": "cell> show screen information", "target": "<CALL display.info>"}
+{"input": "cell> Check display", "target": "<CALL display.info>"}
+{"input": "cell> Show help", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> Show display information?", "target": "<CALL display.info>"}
+{"input": "cell> Show power information", "target": "<CALL power.status>"}
+{"input": "cell> Please list ethernet devices", "target": "<CALL network.list>"}
+{"input": "cell> how much memory is free", "target": "<CALL memory.status>"}
+{"input": "cell> Inspect display?", "target": "<CALL display.info>"}
+{"input": "cell> please show free memory", "target": "<CALL memory.status>"}
+{"input": "cell> check the processor?", "target": "<CALL cpu.info>"}
+{"input": "cell> please check network hardware", "target": "<CALL network.list>"}
+{"input": "cell> List network interfaces", "target": "<CALL network.list>"}
+{"input": "cell> Please show display information", "target": "<CALL display.info>"}
+{"input": "cell> Please what is the power status", "target": "<CALL power.status>"}
+{"input": "cell> please show available memory", "target": "<CALL memory.status>"}
+{"input": "cell> Please show compute hardware", "target": "<CALL gpu.info>"}
+{"input": "cell> please inspect usb", "target": "<CALL usb.list>"}
+{"input": "cell> Tell me who you are?", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> identify the gpu?", "target": "<CALL gpu.info>"}
+{"input": "cell> Who are you?", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> What are you", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> Check the processor", "target": "<CALL cpu.info>"}
+{"input": "cell> check ram", "target": "<CALL memory.status>"}
+{"input": "cell> show compute hardware", "target": "<CALL gpu.info>"}
+{"input": "cell> Please show ethernet devices", "target": "<CALL network.list>"}
+{"input": "cell> Good afternoon?", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> what usb devices are connected?", "target": "<CALL usb.list>"}
+{"input": "cell> Show ram", "target": "<CALL memory.status>"}
+{"input": "cell> Run an unknown driver?", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> please inspect storage", "target": "<CALL storage.list>"}
+{"input": "cell> please check the gpu", "target": "<CALL gpu.info>"}
+{"input": "cell> Execute arbitrary machine code?", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> What is your name", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> please who are you", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> how can you help me?", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> check usb devices", "target": "<CALL usb.list>"}
+{"input": "cell> Show usb?", "target": "<CALL usb.list>"}
+{"input": "cell> please what gpu do i have", "target": "<CALL gpu.info>"}
+{"input": "cell> How much memory is free?", "target": "<CALL memory.status>"}
+{"input": "cell> check network hardware?", "target": "<CALL network.list>"}
+{"input": "cell> what usb devices are connected", "target": "<CALL usb.list>"}
+{"input": "cell> show storage?", "target": "<CALL storage.list>"}
+{"input": "cell> show network?", "target": "<CALL network.list>"}
+{"input": "cell> please is the system ready", "target": "<CALL system.status>"}
+{"input": "cell> Please run an unknown driver", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> Please check storage", "target": "<CALL storage.list>"}
+{"input": "cell> what drives do i have", "target": "<CALL storage.list>"}
+{"input": "cell> Please what can you do", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> please hey", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> list ethernet devices?", "target": "<CALL network.list>"}
+{"input": "cell> Check system status", "target": "<CALL system.status>"}
+{"input": "cell> show gpu information?", "target": "<CALL gpu.info>"}
+{"input": "cell> show storage devices", "target": "<CALL storage.list>"}
+{"input": "cell> Please show system status", "target": "<CALL system.status>"}
+{"input": "cell> inspect usb", "target": "<CALL usb.list>"}
+{"input": "cell> List disks", "target": "<CALL storage.list>"}
+{"input": "cell> list disks", "target": "<CALL storage.list>"}
+{"input": "cell> please good morning", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Where am i", "target": "<CALL storage.pwd>"}
+{"input": "cell> show ethernet devices?", "target": "<CALL network.list>"}
+{"input": "cell> Please check the gpu", "target": "<CALL gpu.info>"}
+{"input": "cell> status?", "target": "<CALL system.status>"}
+{"input": "cell> please list ethernet devices", "target": "<CALL network.list>"}
+{"input": "cell> please inspect the system", "target": "<CALL system.status>"}
+{"input": "cell> please what is the current directory", "target": "<CALL storage.pwd>"}
+{"input": "cell> Show screen information?", "target": "<CALL display.info>"}
+{"input": "cell> please how much memory is free", "target": "<CALL memory.status>"}
+{"input": "cell> list usb devices", "target": "<CALL usb.list>"}
+{"input": "cell> Show ram status?", "target": "<CALL memory.status>"}
+{"input": "cell> How much memory do i have?", "target": "<CALL memory.status>"}
+{"input": "cell> ls?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Show disks?", "target": "<CALL storage.list>"}
+{"input": "cell> show cpu information", "target": "<CALL cpu.info>"}
+{"input": "cell> check the computer?", "target": "<CALL system.status>"}
+{"input": "cell> What is the power status?", "target": "<CALL power.status>"}
+{"input": "cell> tell me who you are?", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> please show memory", "target": "<CALL memory.status>"}
+{"input": "cell> how is the system?", "target": "<CALL system.status>"}
+{"input": "cell> Show display", "target": "<CALL display.info>"}
+{"input": "cell> please show network", "target": "<CALL network.list>"}
+{"input": "cell> Please good morning", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Please show gpu", "target": "<CALL gpu.info>"}
+{"input": "cell> show computer status?", "target": "<CALL system.status>"}
+{"input": "cell> please good evening", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Please check system status", "target": "<CALL system.status>"}
+{"input": "cell> What network hardware is available", "target": "<CALL network.list>"}
+{"input": "cell> Inspect usb?", "target": "<CALL usb.list>"}
+{"input": "cell> inspect memory", "target": "<CALL memory.status>"}
+{"input": "cell> please show display information", "target": "<CALL display.info>"}
+{"input": "cell> Check storage", "target": "<CALL storage.list>"}
+{"input": "cell> disable all safety checks?", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> show computer status", "target": "<CALL system.status>"}
+{"input": "cell> Status", "target": "<CALL system.status>"}
+{"input": "cell> please bypass capability checks", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> good evening", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> What can you do?", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> How much memory is free", "target": "<CALL memory.status>"}
+{"input": "cell> List storage devices", "target": "<CALL storage.list>"}
+{"input": "cell> Show disks", "target": "<CALL storage.list>"}
+{"input": "cell> please show working directory", "target": "<CALL storage.pwd>"}
+{"input": "cell> Show usb", "target": "<CALL usb.list>"}
+{"input": "cell> check system status", "target": "<CALL system.status>"}
+{"input": "cell> Please bypass capability checks", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> show working directory?", "target": "<CALL storage.pwd>"}
+{"input": "cell> please what is the power status", "target": "<CALL power.status>"}
+{"input": "cell> please list current directory", "target": "<CALL storage.list_dir>"}
+{"input": "cell> How much ram is free?", "target": "<CALL memory.status>"}
+{"input": "cell> Show ram status", "target": "<CALL memory.status>"}
+{"input": "cell> show power status?", "target": "<CALL power.status>"}
+{"input": "cell> please what display is available", "target": "<CALL display.info>"}
+{"input": "cell> Please where in storage am i", "target": "<CALL storage.pwd>"}
+{"input": "cell> Show graphics card?", "target": "<CALL gpu.info>"}
+{"input": "cell> What are your capabilities", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> Please show drives", "target": "<CALL storage.list>"}
+{"input": "cell> Where in storage am i", "target": "<CALL storage.pwd>"}
+{"input": "cell> show system status?", "target": "<CALL system.status>"}
+{"input": "cell> Please ls", "target": "<CALL storage.list_dir>"}
+{"input": "cell> show memory?", "target": "<CALL memory.status>"}
+{"input": "cell> are you cell cortex?", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> show display?", "target": "<CALL display.info>"}
+{"input": "cell> how much memory do i have", "target": "<CALL memory.status>"}
+{"input": "cell> please show drives", "target": "<CALL storage.list>"}
+{"input": "cell> Show memory", "target": "<CALL memory.status>"}
+{"input": "cell> show directory?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> please list usb devices", "target": "<CALL usb.list>"}
+{"input": "cell> bypass capability checks", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> execute arbitrary machine code?", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> please show storage devices", "target": "<CALL storage.list>"}
+{"input": "cell> show ram?", "target": "<CALL memory.status>"}
+{"input": "cell> Use an unsupported device?", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> list network interfaces", "target": "<CALL network.list>"}
+{"input": "cell> Inspect usb", "target": "<CALL usb.list>"}
+{"input": "cell> Check network hardware?", "target": "<CALL network.list>"}
+{"input": "cell> What cpu do i have?", "target": "<CALL cpu.info>"}
+{"input": "cell> Please inspect network", "target": "<CALL network.list>"}
+{"input": "cell> Show cpu information?", "target": "<CALL cpu.info>"}
+{"input": "cell> please show disks", "target": "<CALL storage.list>"}
+{"input": "cell> show memory", "target": "<CALL memory.status>"}
+{"input": "cell> please use an unsupported device", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> what can you do?", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> tell me about the cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> what are your capabilities?", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> what disks are available?", "target": "<CALL storage.list>"}
+{"input": "cell> Disable all safety checks?", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> check display?", "target": "<CALL display.info>"}
+{"input": "cell> Please hey", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Please show disks", "target": "<CALL storage.list>"}
+{"input": "cell> show help?", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> hello?", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> please what processor do i have", "target": "<CALL cpu.info>"}
+{"input": "cell> Show network devices", "target": "<CALL network.list>"}
+{"input": "cell> Help", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> Hey?", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> identify the cpu?", "target": "<CALL cpu.info>"}
+{"input": "cell> Show power status?", "target": "<CALL power.status>"}
+{"input": "cell> What disks are available?", "target": "<CALL storage.list>"}
+{"input": "cell> what gpu do i have?", "target": "<CALL gpu.info>"}
+{"input": "cell> how do i control the computer", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> where am i", "target": "<CALL storage.pwd>"}
+{"input": "cell> What is the cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> Please use an unsupported device", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> Please hi cortex", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> what graphics card do i have?", "target": "<CALL gpu.info>"}
+{"input": "cell> Show cpu information", "target": "<CALL cpu.info>"}
+{"input": "cell> What gpu do i have", "target": "<CALL gpu.info>"}
+{"input": "cell> show files here?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> please inspect the gpu", "target": "<CALL gpu.info>"}
+{"input": "cell> Hello cortex?", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> List files", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Please show cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> inspect the gpu?", "target": "<CALL gpu.info>"}
+{"input": "cell> show working directory", "target": "<CALL storage.pwd>"}
+{"input": "cell> check memory", "target": "<CALL memory.status>"}
+{"input": "cell> what display is available", "target": "<CALL display.info>"}
+{"input": "cell> List current directory", "target": "<CALL storage.list_dir>"}
+{"input": "cell> list storage devices", "target": "<CALL storage.list>"}
+{"input": "cell> please what graphics card do i have", "target": "<CALL gpu.info>"}
+{"input": "cell> Please inspect memory", "target": "<CALL memory.status>"}
+{"input": "cell> What files are here?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> please what is the cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> please tell me who you are", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> what is the current directory?", "target": "<CALL storage.pwd>"}
+{"input": "cell> Where in storage am i?", "target": "<CALL storage.pwd>"}
+{"input": "cell> please check memory", "target": "<CALL memory.status>"}
+{"input": "cell> check the processor", "target": "<CALL cpu.info>"}
+{"input": "cell> please what is your name", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> Please hi", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Show free memory", "target": "<CALL memory.status>"}
+{"input": "cell> Show network devices?", "target": "<CALL network.list>"}
+{"input": "cell> Please how do i control the computer", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> please hello cortex", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Good afternoon", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Please where am i", "target": "<CALL storage.pwd>"}
+{"input": "cell> please what are your capabilities", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> Please write directly to an unknown hardware register", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> good evening?", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> show available memory?", "target": "<CALL memory.status>"}
+{"input": "cell> Please what disks are available", "target": "<CALL storage.list>"}
+{"input": "cell> Show files here", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Show screen information", "target": "<CALL display.info>"}
+{"input": "cell> Check memory?", "target": "<CALL memory.status>"}
+{"input": "cell> Bypass capability checks", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> list files?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> ignore hardware safety?", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> What are your capabilities?", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> Show status?", "target": "<CALL system.status>"}
+{"input": "cell> please how much memory do i have", "target": "<CALL memory.status>"}
+{"input": "cell> Check the processor?", "target": "<CALL cpu.info>"}
+{"input": "cell> show files here", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Show available memory", "target": "<CALL memory.status>"}
+{"input": "cell> list ethernet devices", "target": "<CALL network.list>"}
+{"input": "cell> Tell me the system status?", "target": "<CALL system.status>"}
+{"input": "cell> show memory status", "target": "<CALL memory.status>"}
+{"input": "cell> show display information?", "target": "<CALL display.info>"}
+{"input": "cell> Show ethernet devices", "target": "<CALL network.list>"}
+{"input": "cell> Show energy status?", "target": "<CALL power.status>"}
+{"input": "cell> please check ram", "target": "<CALL memory.status>"}
+{"input": "cell> please list drives", "target": "<CALL storage.list>"}
+{"input": "cell> Show processor?", "target": "<CALL cpu.info>"}
+{"input": "cell> Show processor", "target": "<CALL cpu.info>"}
+{"input": "cell> Identify the cpu?", "target": "<CALL cpu.info>"}
+{"input": "cell> Show power status", "target": "<CALL power.status>"}
+{"input": "cell> Please list network interfaces", "target": "<CALL network.list>"}
+{"input": "cell> Show network interfaces?", "target": "<CALL network.list>"}
+{"input": "cell> please inspect power", "target": "<CALL power.status>"}
+{"input": "cell> please show files here", "target": "<CALL storage.list_dir>"}
+{"input": "cell> show network devices?", "target": "<CALL network.list>"}
+{"input": "cell> Please what are your capabilities", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> please are you cell cortex", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> Please hello", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> hi?", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> good morning?", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> what graphics card do i have", "target": "<CALL gpu.info>"}
+{"input": "cell> List files?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Please how much ram do i have", "target": "<CALL memory.status>"}
+{"input": "cell> who are you?", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> How much memory do i have", "target": "<CALL memory.status>"}
+{"input": "cell> Please show memory", "target": "<CALL memory.status>"}
+{"input": "cell> Show network", "target": "<CALL network.list>"}
+{"input": "cell> show gpu?", "target": "<CALL gpu.info>"}
+{"input": "cell> please hi cortex", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> How can you help me?", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> inspect power", "target": "<CALL power.status>"}
+{"input": "cell> List network devices", "target": "<CALL network.list>"}
+{"input": "cell> inspect power?", "target": "<CALL power.status>"}
+{"input": "cell> Please hello cortex", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> tell me the system status?", "target": "<CALL system.status>"}
+{"input": "cell> please show ram status", "target": "<CALL memory.status>"}
+{"input": "cell> Please tell me the system status", "target": "<CALL system.status>"}
+{"input": "cell> hello cortex", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Show graphics hardware", "target": "<CALL gpu.info>"}
+{"input": "cell> please show energy status", "target": "<CALL power.status>"}
+{"input": "cell> inspect storage?", "target": "<CALL storage.list>"}
+{"input": "cell> Please inspect the system", "target": "<CALL system.status>"}
+{"input": "cell> Show storage", "target": "<CALL storage.list>"}
+{"input": "cell> Tell me the system status", "target": "<CALL system.status>"}
+{"input": "cell> show graphics card?", "target": "<CALL gpu.info>"}
+{"input": "cell> Please how much memory is free", "target": "<CALL memory.status>"}
+{"input": "cell> please show cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> show energy status?", "target": "<CALL power.status>"}
+{"input": "cell> Status?", "target": "<CALL system.status>"}
+{"input": "cell> check ram?", "target": "<CALL memory.status>"}
+{"input": "cell> inspect the cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> Good evening", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Show cpu capabilities?", "target": "<CALL cpu.info>"}
+{"input": "cell> Please what storage is available", "target": "<CALL storage.list>"}
+{"input": "cell> Please identify the cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> please show ram", "target": "<CALL memory.status>"}
+{"input": "cell> help", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> Write directly to an unknown hardware register", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> hi cortex", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> show network devices", "target": "<CALL network.list>"}
+{"input": "cell> show storage devices?", "target": "<CALL storage.list>"}
+{"input": "cell> Please show network devices", "target": "<CALL network.list>"}
+{"input": "cell> List drives", "target": "<CALL storage.list>"}
+{"input": "cell> how much ram do i have?", "target": "<CALL memory.status>"}
+{"input": "cell> list drives", "target": "<CALL storage.list>"}
+{"input": "cell> Please list usb devices", "target": "<CALL usb.list>"}
+{"input": "cell> What display is available?", "target": "<CALL display.info>"}
+{"input": "cell> please show network interfaces", "target": "<CALL network.list>"}
+{"input": "cell> show processor information", "target": "<CALL cpu.info>"}
+{"input": "cell> please show power information", "target": "<CALL power.status>"}
+{"input": "cell> Please identify the gpu", "target": "<CALL gpu.info>"}
+{"input": "cell> what processor do i have?", "target": "<CALL cpu.info>"}
+{"input": "cell> please check usb devices", "target": "<CALL usb.list>"}
+{"input": "cell> Show directory", "target": "<CALL storage.list_dir>"}
+{"input": "cell> is the system ready?", "target": "<CALL system.status>"}
+{"input": "cell> Please what display is available", "target": "<CALL display.info>"}
+{"input": "cell> Check the gpu", "target": "<CALL gpu.info>"}
+{"input": "cell> show ram", "target": "<CALL memory.status>"}
+{"input": "cell> what gpu do i have", "target": "<CALL gpu.info>"}
+{"input": "cell> show gpu information", "target": "<CALL gpu.info>"}
+{"input": "cell> ignore hardware safety", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> What storage is available?", "target": "<CALL storage.list>"}
+{"input": "cell> How much ram do i have", "target": "<CALL memory.status>"}
+{"input": "cell> check the gpu?", "target": "<CALL gpu.info>"}
+{"input": "cell> hi", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Ignore hardware safety?", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> what processor do i have", "target": "<CALL cpu.info>"}
+{"input": "cell> show processor information?", "target": "<CALL cpu.info>"}
+{"input": "cell> please what drives do i have", "target": "<CALL storage.list>"}
+{"input": "cell> Please list current directory", "target": "<CALL storage.list_dir>"}
+{"input": "cell> what cpu do i have?", "target": "<CALL cpu.info>"}
+{"input": "cell> please show power status", "target": "<CALL power.status>"}
+{"input": "cell> please show network devices", "target": "<CALL network.list>"}
+{"input": "cell> list directory", "target": "<CALL storage.list_dir>"}
+{"input": "cell> check storage?", "target": "<CALL storage.list>"}
+{"input": "cell> show network interfaces?", "target": "<CALL network.list>"}
+{"input": "cell> please tell me about memory", "target": "<CALL memory.status>"}
+{"input": "cell> show power information", "target": "<CALL power.status>"}
+{"input": "cell> show drives", "target": "<CALL storage.list>"}
+{"input": "cell> Please show storage devices", "target": "<CALL storage.list>"}
+{"input": "cell> please show gpu information", "target": "<CALL gpu.info>"}
+{"input": "cell> Please what processor do i have", "target": "<CALL cpu.info>"}
+{"input": "cell> Please show files", "target": "<CALL storage.list_dir>"}
+{"input": "cell> show ram status?", "target": "<CALL memory.status>"}
+{"input": "cell> please what can you do", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> Show cpu capabilities", "target": "<CALL cpu.info>"}
+{"input": "cell> disable all safety checks", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> run an unknown driver?", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> Show available memory?", "target": "<CALL memory.status>"}
+{"input": "cell> Please what are you", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> Show ethernet devices?", "target": "<CALL network.list>"}
+{"input": "cell> Please show processor information", "target": "<CALL cpu.info>"}
+{"input": "cell> what storage is available", "target": "<CALL storage.list>"}
+{"input": "cell> inspect storage", "target": "<CALL storage.list>"}
+{"input": "cell> please show cpu capabilities", "target": "<CALL cpu.info>"}
+{"input": "cell> What gpu do i have?", "target": "<CALL gpu.info>"}
+{"input": "cell> please ls", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Show usb devices", "target": "<CALL usb.list>"}
+{"input": "cell> please what disks are available", "target": "<CALL storage.list>"}
+{"input": "cell> Please show cpu capabilities", "target": "<CALL cpu.info>"}
+{"input": "cell> pwd?", "target": "<CALL storage.pwd>"}
+{"input": "cell> Identify the cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> What files are here", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Show files here?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Ls?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> is the system ready", "target": "<CALL system.status>"}
+{"input": "cell> what cpu do i have", "target": "<CALL cpu.info>"}
+{"input": "cell> Pwd?", "target": "<CALL storage.pwd>"}
+{"input": "cell> please show connected usb devices", "target": "<CALL usb.list>"}
+{"input": "cell> please show status", "target": "<CALL system.status>"}
+{"input": "cell> show help", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> show ethernet devices", "target": "<CALL network.list>"}
+{"input": "cell> please show current directory", "target": "<CALL storage.pwd>"}
+{"input": "cell> Please what is the current directory", "target": "<CALL storage.pwd>"}
+{"input": "cell> Show drives", "target": "<CALL storage.list>"}
+{"input": "cell> please check storage", "target": "<CALL storage.list>"}
+{"input": "cell> Inspect memory?", "target": "<CALL memory.status>"}
+{"input": "cell> Show cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> help?", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> Show gpu?", "target": "<CALL gpu.info>"}
+{"input": "cell> identify the cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> please what network hardware is available", "target": "<CALL network.list>"}
+{"input": "cell> Please is the system ready", "target": "<CALL system.status>"}
+{"input": "cell> please hi", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> What is the power status", "target": "<CALL power.status>"}
+{"input": "cell> please show graphics hardware", "target": "<CALL gpu.info>"}
+{"input": "cell> how is the system", "target": "<CALL system.status>"}
+{"input": "cell> please inspect the cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> show available memory", "target": "<CALL memory.status>"}
+{"input": "cell> list directory?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> show compute hardware?", "target": "<CALL gpu.info>"}
+{"input": "cell> Please what is the cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> How is the system?", "target": "<CALL system.status>"}
+{"input": "cell> please show system status", "target": "<CALL system.status>"}
+{"input": "cell> check usb devices?", "target": "<CALL usb.list>"}
+{"input": "cell> Inspect the cpu?", "target": "<CALL cpu.info>"}
+{"input": "cell> Please help", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> Check the computer?", "target": "<CALL system.status>"}
+{"input": "cell> Please show power information", "target": "<CALL power.status>"}
+{"input": "cell> what is the power status?", "target": "<CALL power.status>"}
+{"input": "cell> pwd", "target": "<CALL storage.pwd>"}
+{"input": "cell> Please identify yourself", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> Show status", "target": "<CALL system.status>"}
+{"input": "cell> Check ram?", "target": "<CALL memory.status>"}
+{"input": "cell> check storage", "target": "<CALL storage.list>"}
+{"input": "cell> Show files", "target": "<CALL storage.list_dir>"}
+{"input": "cell> show system status", "target": "<CALL system.status>"}
+{"input": "cell> Show graphics hardware?", "target": "<CALL gpu.info>"}
+{"input": "cell> What graphics card do i have?", "target": "<CALL gpu.info>"}
+{"input": "cell> What display is available", "target": "<CALL display.info>"}
+{"input": "cell> please how do i control the computer", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> Use an unsupported device", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> What usb devices are connected?", "target": "<CALL usb.list>"}
+{"input": "cell> please identify the gpu", "target": "<CALL gpu.info>"}
+{"input": "cell> Check the gpu?", "target": "<CALL gpu.info>"}
+{"input": "cell> identify the gpu", "target": "<CALL gpu.info>"}
+{"input": "cell> check memory?", "target": "<CALL memory.status>"}
+{"input": "cell> Are you cell cortex", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> please inspect memory", "target": "<CALL memory.status>"}
+{"input": "cell> show status", "target": "<CALL system.status>"}
+{"input": "cell> show connected usb devices", "target": "<CALL usb.list>"}
+{"input": "cell> Please show processor", "target": "<CALL cpu.info>"}
+{"input": "cell> what is the power status", "target": "<CALL power.status>"}
+{"input": "cell> Identify yourself?", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> Identify the gpu", "target": "<CALL gpu.info>"}
+{"input": "cell> what is the current directory", "target": "<CALL storage.pwd>"}
+{"input": "cell> Show gpu information?", "target": "<CALL gpu.info>"}
+{"input": "cell> Please disable all safety checks", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> Please show storage", "target": "<CALL storage.list>"}
+{"input": "cell> how much ram is free", "target": "<CALL memory.status>"}
+{"input": "cell> where in storage am i?", "target": "<CALL storage.pwd>"}
+{"input": "cell> Please show directory contents", "target": "<CALL storage.list_dir>"}
+{"input": "cell> list disks?", "target": "<CALL storage.list>"}
+{"input": "cell> Show graphics output", "target": "<CALL display.info>"}
+{"input": "cell> how much memory is free?", "target": "<CALL memory.status>"}
+{"input": "cell> Please tell me who you are", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> list current directory?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Show computer status?", "target": "<CALL system.status>"}
+{"input": "cell> List ethernet devices", "target": "<CALL network.list>"}
+{"input": "cell> Check usb devices?", "target": "<CALL usb.list>"}
+{"input": "cell> please check display", "target": "<CALL display.info>"}
+{"input": "cell> check power?", "target": "<CALL power.status>"}
+{"input": "cell> Please how is the system", "target": "<CALL system.status>"}
+{"input": "cell> Please show energy status", "target": "<CALL power.status>"}
+{"input": "cell> please where in storage am i", "target": "<CALL storage.pwd>"}
+{"input": "cell> inspect memory?", "target": "<CALL memory.status>"}
+{"input": "cell> please ignore hardware safety", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> show graphics card", "target": "<CALL gpu.info>"}
+{"input": "cell> List disks?", "target": "<CALL storage.list>"}
+{"input": "cell> Show storage devices?", "target": "<CALL storage.list>"}
+{"input": "cell> Inspect the gpu?", "target": "<CALL gpu.info>"}
+{"input": "cell> What cpu do i have", "target": "<CALL cpu.info>"}
+{"input": "cell> Please what gpu do i have", "target": "<CALL gpu.info>"}
+{"input": "cell> Please check usb devices", "target": "<CALL usb.list>"}
+{"input": "cell> inspect network", "target": "<CALL network.list>"}
+{"input": "cell> show graphics output", "target": "<CALL display.info>"}
+{"input": "cell> Show storage devices", "target": "<CALL storage.list>"}
+{"input": "cell> Hey", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> please list network interfaces", "target": "<CALL network.list>"}
+{"input": "cell> Please inspect power", "target": "<CALL power.status>"}
+{"input": "cell> show usb?", "target": "<CALL usb.list>"}
+{"input": "cell> good morning", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> show files", "target": "<CALL storage.list_dir>"}
+{"input": "cell> how much ram do i have", "target": "<CALL memory.status>"}
+{"input": "cell> Please check power", "target": "<CALL power.status>"}
+{"input": "cell> Show drives?", "target": "<CALL storage.list>"}
+{"input": "cell> Ignore hardware safety", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> please list storage devices", "target": "<CALL storage.list>"}
+{"input": "cell> What disks are available", "target": "<CALL storage.list>"}
+{"input": "cell> inspect display?", "target": "<CALL display.info>"}
+{"input": "cell> What processor do i have?", "target": "<CALL cpu.info>"}
+{"input": "cell> Inspect display", "target": "<CALL display.info>"}
+{"input": "cell> what are you", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> What graphics card do i have", "target": "<CALL gpu.info>"}
+{"input": "cell> what network hardware is available", "target": "<CALL network.list>"}
+{"input": "cell> Are you cell cortex?", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> Show directory contents", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Tell me about the cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> please execute arbitrary machine code", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> How much ram do i have?", "target": "<CALL memory.status>"}
+{"input": "cell> Please check the computer", "target": "<CALL system.status>"}
+{"input": "cell> Good morning", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> show directory contents?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> please show directory", "target": "<CALL storage.list_dir>"}
+{"input": "cell> show display information", "target": "<CALL display.info>"}
+{"input": "cell> tell me who you are", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> Show storage?", "target": "<CALL storage.list>"}
+{"input": "cell> show processor?", "target": "<CALL cpu.info>"}
+{"input": "cell> use an unsupported device?", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> What storage is available", "target": "<CALL storage.list>"}
+{"input": "cell> tell me about memory?", "target": "<CALL memory.status>"}
+{"input": "cell> Check ram", "target": "<CALL memory.status>"}
+{"input": "cell> Show network interfaces", "target": "<CALL network.list>"}
+{"input": "cell> Inspect power?", "target": "<CALL power.status>"}
+{"input": "cell> please what are you", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> What network hardware is available?", "target": "<CALL network.list>"}
+{"input": "cell> show memory status?", "target": "<CALL memory.status>"}
+{"input": "cell> Show connected usb devices", "target": "<CALL usb.list>"}
+{"input": "cell> Check display?", "target": "<CALL display.info>"}
+{"input": "cell> hey", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> check system status?", "target": "<CALL system.status>"}
+{"input": "cell> Show graphics card", "target": "<CALL gpu.info>"}
+{"input": "cell> Show processor information", "target": "<CALL cpu.info>"}
+{"input": "cell> Check storage?", "target": "<CALL storage.list>"}
+{"input": "cell> show directory", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Please tell me about memory", "target": "<CALL memory.status>"}
+{"input": "cell> please show computer status", "target": "<CALL system.status>"}
+{"input": "cell> Good morning?", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> How do i control the computer?", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> Tell me who you are", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> check the gpu", "target": "<CALL gpu.info>"}
+{"input": "cell> please check system status", "target": "<CALL system.status>"}
+{"input": "cell> What is your name?", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> How can you help me", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> show status?", "target": "<CALL system.status>"}
+{"input": "cell> Pwd", "target": "<CALL storage.pwd>"}
+{"input": "cell> Please list drives", "target": "<CALL storage.list>"}
+{"input": "cell> Check power", "target": "<CALL power.status>"}
+{"input": "cell> please check power", "target": "<CALL power.status>"}
+{"input": "cell> inspect the cpu?", "target": "<CALL cpu.info>"}
+{"input": "cell> list current directory", "target": "<CALL storage.list_dir>"}
+{"input": "cell> How much ram is free", "target": "<CALL memory.status>"}
+{"input": "cell> what files are here", "target": "<CALL storage.list_dir>"}
+{"input": "cell> show current directory", "target": "<CALL storage.pwd>"}
+{"input": "cell> Please show directory", "target": "<CALL storage.list_dir>"}
+{"input": "cell> What are you?", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> please what storage is available", "target": "<CALL storage.list>"}
+{"input": "cell> Show memory?", "target": "<CALL memory.status>"}
+{"input": "cell> please show graphics output", "target": "<CALL display.info>"}
+{"input": "cell> please run an unknown driver", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> Please show graphics output", "target": "<CALL display.info>"}
+{"input": "cell> Hello?", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> Inspect memory", "target": "<CALL memory.status>"}
+{"input": "cell> What drives do i have", "target": "<CALL storage.list>"}
+{"input": "cell> show cpu", "target": "<CALL cpu.info>"}
+{"input": "cell> show drives?", "target": "<CALL storage.list>"}
+{"input": "cell> Show computer status", "target": "<CALL system.status>"}
+{"input": "cell> Please show working directory", "target": "<CALL storage.pwd>"}
+{"input": "cell> Show connected usb devices?", "target": "<CALL usb.list>"}
+{"input": "cell> Execute arbitrary machine code", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> show storage", "target": "<CALL storage.list>"}
+{"input": "cell> show screen information?", "target": "<CALL display.info>"}
+{"input": "cell> what is the cpu?", "target": "<CALL cpu.info>"}
+{"input": "cell> show disks?", "target": "<CALL storage.list>"}
+{"input": "cell> Inspect network?", "target": "<CALL network.list>"}
+{"input": "cell> Please status", "target": "<CALL system.status>"}
+{"input": "cell> Check power?", "target": "<CALL power.status>"}
+{"input": "cell> Show network?", "target": "<CALL network.list>"}
+{"input": "cell> Please what graphics card do i have", "target": "<CALL gpu.info>"}
+{"input": "cell> please check the computer", "target": "<CALL system.status>"}
+{"input": "cell> What is the current directory", "target": "<CALL storage.pwd>"}
+{"input": "cell> check the computer", "target": "<CALL system.status>"}
+{"input": "cell> Please show power status", "target": "<CALL power.status>"}
+{"input": "cell> Please show network", "target": "<CALL network.list>"}
+{"input": "cell> please show gpu", "target": "<CALL gpu.info>"}
+{"input": "cell> Check system status?", "target": "<CALL system.status>"}
+{"input": "cell> Please pwd", "target": "<CALL storage.pwd>"}
+{"input": "cell> What usb devices are connected", "target": "<CALL usb.list>"}
+{"input": "cell> inspect network?", "target": "<CALL network.list>"}
+{"input": "cell> are you cell cortex", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> Show ram?", "target": "<CALL memory.status>"}
+{"input": "cell> show energy status", "target": "<CALL power.status>"}
+{"input": "cell> Please ignore hardware safety", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> Show compute hardware?", "target": "<CALL gpu.info>"}
+{"input": "cell> please what usb devices are connected", "target": "<CALL usb.list>"}
+{"input": "cell> please what cpu do i have", "target": "<CALL cpu.info>"}
+{"input": "cell> Inspect network", "target": "<CALL network.list>"}
+{"input": "cell> Show directory?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> please show cpu information", "target": "<CALL cpu.info>"}
+{"input": "cell> please good afternoon", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> how do i control the computer?", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> show cpu capabilities", "target": "<CALL cpu.info>"}
+{"input": "cell> Please inspect display", "target": "<CALL display.info>"}
+{"input": "cell> List current directory?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> show free memory?", "target": "<CALL memory.status>"}
+{"input": "cell> please help", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> Please show screen information", "target": "<CALL display.info>"}
+{"input": "cell> show display", "target": "<CALL display.info>"}
+{"input": "cell> bypass capability checks?", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> Please show ram status", "target": "<CALL memory.status>"}
+{"input": "cell> tell me about memory", "target": "<CALL memory.status>"}
+{"input": "cell> please show memory status", "target": "<CALL memory.status>"}
+{"input": "cell> show cpu?", "target": "<CALL cpu.info>"}
+{"input": "cell> Show graphics output?", "target": "<CALL display.info>"}
+{"input": "cell> Please show memory status", "target": "<CALL memory.status>"}
+{"input": "cell> Please what network hardware is available", "target": "<CALL network.list>"}
+{"input": "cell> please write directly to an unknown hardware register", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> Please are you cell cortex", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> good afternoon", "target": "Hello. I am Cell Cortex."}
+{"input": "cell> what files are here?", "target": "<CALL storage.list_dir>"}
+{"input": "cell> List usb devices?", "target": "<CALL usb.list>"}
+{"input": "cell> Inspect storage?", "target": "<CALL storage.list>"}
+{"input": "cell> please show ethernet devices", "target": "<CALL network.list>"}
+{"input": "cell> Please execute arbitrary machine code", "target": "I cannot perform that action without a verified Cell capability."}
+{"input": "cell> Please list network devices", "target": "<CALL network.list>"}
+{"input": "cell> what storage is available?", "target": "<CALL storage.list>"}
+{"input": "cell> How is the system", "target": "<CALL system.status>"}
+{"input": "cell> show processor", "target": "<CALL cpu.info>"}
+{"input": "cell> What drives do i have?", "target": "<CALL storage.list>"}
+{"input": "cell> what are you?", "target": "I am Cell Cortex, the personal intelligence of Cell OS."}
+{"input": "cell> please inspect display", "target": "<CALL display.info>"}
+{"input": "cell> please how can you help me", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> Please how can you help me", "target": "I can understand natural language and control Cell OS through verified capabilities."}
+{"input": "cell> how much ram is free?", "target": "<CALL memory.status>"}
+{"input": "cell> Please list files", "target": "<CALL storage.list_dir>"}
+{"input": "cell> where in storage am i", "target": "<CALL storage.pwd>"}
+{"input": "cell> List directory", "target": "<CALL storage.list_dir>"}
+{"input": "cell> Check network hardware", "target": "<CALL network.list>"}
+{"input": "cell> Please show connected usb devices", "target": "<CALL usb.list>"}
