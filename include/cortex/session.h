@@ -2,6 +2,7 @@
  * Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
+
 #pragma once
 #include <stddef.h>
 #include "core/capability.h"

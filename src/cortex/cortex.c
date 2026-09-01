@@ -2,6 +2,7 @@
  * Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
+
 #include "cortex/cortex.h"
 #include <stdint.h>
 #include <string.h>

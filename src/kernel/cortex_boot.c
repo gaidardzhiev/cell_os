@@ -2,6 +2,7 @@
  * Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
+
 #include <stddef.h>
 #include <stdint.h>
 #include "boot/boot_ext.h"

@@ -2,6 +2,7 @@
  * Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
+
 #include "cortex/cwm.h"
 
 uint32_t cwm_crc32(const void *data, size_t bytes) {
