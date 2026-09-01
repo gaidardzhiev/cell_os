@@ -300,10 +300,10 @@ The original Cell OS subsystems remain in place. The Cortex work extends the tre
 - `libparcel/parcel.c`: parcel framing shared by target and host tooling.
 - `src/core/mem_arena.c`: bounded memory arena used by Cortex and other native allocations.
 - `src/core/cellfs.c` and `src/core/vfs.c`: persistent CellFS-1 storage and the unified live/persistent namespace.
-- `src/core/cellexec.c` and `src/core/task.c`: CellExec-1 verifier plus synchronous bounded task execution.
+- `src/core/cellexec.c` and `src/core/task.c`: CellExec-1 verifier plus synchronous bounded task execution, file descriptors, syscall dispatch, errno, bounded allocation, and the bounded function call stack.
 - `src/core/cc.c` and `include/core/cc.h`: bootstrap C parser/code generator shared by host `cc` and the target shell builtin.
 - `tools/cc.c`: host command-line frontend for the same bootstrap C compiler.
-- `sdk/include/`: initial C-facing SDK declarations for standard output, strings, integer conversion, and explicit Cell capabilities.
+- `sdk/include/`: initial C-facing SDK declarations for standard output, strings, integer conversion, file descriptors, file I/O, errno, bounded allocation, and explicit Cell capabilities.
 - `src/core/shell.c`: deliberately small POSIX-shell-compatible command surface, quoting/redirection parser, `/programs` lookup, `cc`, and `ps` interface.
 - `programs/`: C proof programs including `hello`, `observe`, and the argument/runtime proof, compiled into CellExec-1 and installed persistently into `/programs`.
 - `src/drivers/x86/ata_pio.c`: current x86 ATA PIO path used to load the model payload.
@@ -469,7 +469,7 @@ The Cortex capability loop adds a deterministic regression target before image c
 make test-caploop CORTEX_MODEL=models/celllm_1m.cwm
 ```
 
-`test-capability` verifies exact call parsing, rejection of unknown names, E820/memory result serialization, CPU result structure, system status, and deterministic rendering. `test-cellfs`/`test-vfs` verify persistent remount, namespace semantics, live capability nodes, and the binary/text boundary. `test-cellexec` validates the executable ABI and static verifier. `test-task` exercises lifecycle, gas exhaustion, task-local memory, capability policy, and the `/programs` execution boundary. `test-cc` verifies the supported C parser/code generator, CellExec validation, capability inference, unsupported-surface rejection, and the current `argc/argv` and pointer/runtime subset. `test-c-runtime` verifies the process ABI, character-pointer and argument indexing, `puts`/`putchar`/`strlen`/`strcmp`/`atoi`, arithmetic comparisons, and expression returns. `test-shell` verifies Unix/POSIX command names, quoting, `>`/`>>` redirection, `/programs` lookup, `cc`, persistent compiled programs, process argument forwarding, `ps`, and absence of the earlier proof command vocabulary. `test-program-image` executes compiled programs after installation into persistent CellFS. `test-cortex-session` drives the same shell, VFS, process/task, compiler, and learned capability-routing paths used by the bare-metal interactive session.
+`test-capability` verifies exact call parsing, rejection of unknown names, E820/memory result serialization, CPU result structure, system status, and deterministic rendering. `test-cellfs`/`test-vfs` verify persistent remount, namespace semantics, live capability nodes, and the binary/text boundary. `test-cellexec` validates the executable ABI and static verifier. `test-task` exercises lifecycle, gas exhaustion, task-local memory, capability policy, and the `/programs` execution boundary. `test-cc` verifies the supported C parser/code generator, CellExec validation, capability inference, unsupported-surface rejection, and the current `argc/argv` and pointer/runtime subset. `test-c-runtime` verifies the process ABI, character-pointer and argument indexing, `puts`/`putchar`/`strlen`/`strcmp`/`atoi`, arithmetic comparisons, and expression returns. `test-c-system` verifies file descriptors, `open`/`close`/`read`/`write`/`lseek`, standard descriptors, `errno`, bounded allocation, writable namespace policy, live VFS reads, user-defined functions, bounded recursion, and pointer-indexed byte stores. `test-shell` verifies Unix/POSIX command names, quoting, `>`/`>>` redirection, `/programs` lookup, `cc`, persistent compiled programs, process argument forwarding, target-compiled descriptor I/O, `ps`, and absence of the earlier proof command vocabulary. `test-program-image` executes compiled programs after installation into persistent CellFS. `test-cortex-session` drives the same shell, VFS, process/task, compiler, and learned capability-routing paths used by the bare-metal interactive session.
 
 The Cortex work also retains three model/runtime validation boundaries.
 
@@ -549,12 +549,17 @@ The repository currently establishes the following Cortex and native-programming
 - target-side C source compilation directly inside the running Cell OS reference system;
 - persistent installation of compiler output into `/programs` and later execution through the normal task verifier;
 - a real task-local C process ABI with `argc/argv`;
+- a task-local file-descriptor ABI with conventional descriptors `0`, `1`, and `2`;
+- C-facing `open`, `close`, `read`, `write`, and `lseek` operations routed through the Cell VFS;
+- POSIX-style `errno` propagation and a bounded task-local `malloc`/`free` allocator;
+- user-defined integer functions with bounded call depth, including forward calls and recursion;
+- pointer-indexed byte stores sufficient for mutable task-local C buffers;
 - the initial pointer/runtime surface required for command-line C programs, including `char *`, `char **`, `argv[i]`, `puts`, `putchar`, `strlen`, `strcmp`, and `atoi`;
 - integer division, modulo, comparison operators, logical negation, and expression-valued returns in the bootstrap compiler;
 - shell argument forwarding from quoted POSIX-oriented command input into compiled CellExec tasks;
 - process-history inspection through `ps`, including exit status, gas usage, and executable path;
 - a consolidated top-level build graph that retains the historical Cell OS proof targets without separate `e*.mk` fragments;
-- a freestanding x86 Cortex kernel measured at 49,568 bytes in the validated current build, leaving substantial margin beneath the current conservative BIOS staging limit.
+- a freestanding x86 Cortex kernel measured at 59,852 bytes with the native C system interface included, remaining beneath the unchanged 65,024-byte conservative BIOS staging limit.
 
 The important result is no longer only that CellLM-1M can run natively. Cell OS now joins learned semantic mediation, deterministic capabilities, persistent storage, a verified executable format, a task process ABI, and a native C compilation path in one bootable system. C source entered at the `cell$` prompt can become a persistent verified program and execute without Linux, libc, GCC, Python, or another conventional operating system existing beneath the target runtime.
 
@@ -705,11 +710,82 @@ The final validated freestanding build uses size-oriented optimization for the t
 
 This leaves more than 15 KiB of headroom below the current 65,024-byte conservative BIOS staging limit and avoids solving compiler/runtime growth by weakening the boot boundary.
 
+## Native C System Interface
+
+The native programming environment now has a process-facing system interface instead of requiring each filesystem or output operation to become a compiler-specific builtin. Compiled CellExec programs can use conventional C names for file I/O and basic process runtime services:
+
+```c
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
+#include <stdlib.h>
+
+int main(void) {
+    int fd;
+    char *buf;
+    int n;
+
+    fd = open("/home/native.txt", O_CREAT | O_TRUNC | O_RDWR);
+    if (fd < 0) return errno;
+
+    if (write(fd, "cell io\n", 8) != 8) return errno;
+    if (lseek(fd, 0, SEEK_SET) < 0) return errno;
+
+    buf = malloc(16);
+    if (buf == 0) return errno;
+
+    n = read(fd, buf, 8);
+    if (n > 0) write(STDOUT_FILENO, buf, n);
+
+    free(buf);
+    close(fd);
+    return 0;
+}
+```
+
+The interface is implemented as a verified CellExec syscall instruction backed by task-local kernel state. Each task receives a bounded descriptor table, independent file offsets, an `errno` value, a bounded heap, and a bounded function call stack. File operations continue through the Cell VFS rather than bypassing it, so persistent CellFS files and live virtual nodes share the same descriptor-facing read path.
+
+The current descriptor contract includes:
+
+- `STDIN_FILENO`, `STDOUT_FILENO`, and `STDERR_FILENO` as descriptors `0`, `1`, and `2`;
+- `open` with `O_RDONLY`, `O_WRONLY`, `O_RDWR`, `O_CREAT`, `O_TRUNC`, and `O_APPEND`;
+- `close`;
+- `read`;
+- `write`;
+- `lseek` with `SEEK_SET`, `SEEK_CUR`, and `SEEK_END`;
+- POSIX-style error values exposed through `errno`;
+- bounded `malloc` and `free` using task-local CellExec memory.
+
+Programmatic writes are currently restricted to `/home`. A compiled task cannot use the new descriptor ABI to overwrite `/programs`; attempts are rejected with `EACCES`. This keeps the writable data namespace separate from the executable installation boundary while the program-management model is still evolving.
+
+The C compiler also grows only as required by this system interface. It now supports user-defined integer functions with up to two parameters, forward calls, a bounded call stack, recursion within that bound, and pointer-indexed byte stores for mutable buffers. These additions are sufficient for functions such as recursive integer helpers and for constructing or modifying memory returned by `malloc` without claiming complete C pointer semantics.
+
+The regression path verifies the full chain:
+
+```text
+C source
+  -> target-compatible cc frontend
+  -> verified CellExec syscall instruction
+  -> task-local fd/errno/heap/call state
+  -> Cell VFS
+  -> persistent CellFS or live VFS node
+```
+
+Host integration tests establish file creation, truncation, read/write offsets, seeking, standard descriptors, `errno`, bounded allocation, the `/home` write boundary, live VFS reads, user-defined functions, recursive bounded calls, and pointer-indexed byte stores. The shell regression additionally creates C source in `/home`, compiles it to `/programs`, executes it, and verifies that the resulting task writes a persistent file through `open`/`write`/`close`.
+
+The current freestanding kernel containing this interface measures:
+
+```text
+# cortex-kernel: 59852 bytes
+```
+
+The conservative BIOS staging limit remains unchanged at 65,024 bytes.
+
 ## Why This Milestone Matters
 
 Cell OS is still experimental, but the system has moved beyond a boot proof, a filesystem proof, an interpreter proof, or an AI demo considered separately. The current reference image combines all of them into one operating substrate.
 
-A human can boot Cell OS, create a C source file, invoke `cc` from the Cell OS prompt, produce a persistent executable, run it with arguments, inspect its exit status and gas usage, and still use natural-language requests through a native transformer whose actions are constrained by deterministic capabilities.
+A human can boot Cell OS, create a C source file, invoke `cc` from the Cell OS prompt, produce a persistent executable, run it with arguments, use conventional file-descriptor I/O from that C program, allocate bounded task-local memory, inspect its exit status and gas usage, and still use natural-language requests through a native transformer whose actions are constrained by deterministic capabilities.
 
 There is deliberately no Linux userspace underneath this path. The target does not call GCC, Clang, Python, PyTorch, llama.cpp, GGML, or a host libc to compile and execute the program after boot. The compiler frontend, VFS, persistent filesystem, executable verifier, task runtime, capability dispatcher, transformer inference engine, and shell integration are Cell OS components.
 
@@ -726,10 +802,12 @@ The current work remains deliberately narrower than the long-term architecture.
 - CellExec-1 intentionally does not admit arbitrary native x86 instructions from writable storage.
 - CellFS-1 currently uses append-only data allocation and has no reclamation or journal.
 - The C compiler remains a bootstrap subset rather than a complete ISO C implementation.
-- General pointers, arbitrary arrays, structs/unions, user-defined functions beyond `main`, global objects, a general preprocessor, object files, a linker, dynamic libraries, environment variables, and a complete libc are not implemented yet.
+- General pointer semantics, arbitrary arrays, structs/unions, global objects, a general preprocessor, object files, a linker, dynamic libraries, environment variables, and a complete libc are not implemented yet. User-defined integer functions currently support at most two parameters and a bounded call depth.
 - The supported `char *` and `char **` surface is currently driven by the process/runtime needs of `argc/argv`; it should not be interpreted as complete C pointer semantics.
-- File descriptors and the conventional `open`, `close`, `read`, `write`, and `lseek` system interface are not implemented yet.
-- `stdin`, `stdout`, `stderr`, `errno`, and a general user allocator are not yet exposed as a normal C runtime contract.
+- File descriptors are intentionally bounded to eight per task in the current implementation.
+- `stdin` currently has EOF-only semantics; interactive task input and blocking descriptor I/O are not implemented yet.
+- The current allocator is a bounded task-local allocator with eight tracked blocks, not a general heap with coalescing or virtual memory.
+- File writes from ordinary compiled tasks are currently restricted to `/home`; a broader permissions and executable-installation model is future work.
 - The target `cc` currently resides in the trusted kernel/shell image rather than running as an ordinary CellExec process.
 - The compiler does not yet compile its own source inside Cell OS, so the system is not self-hosting.
 - Synthetic `/proc`, `/dev`, and `/sys` namespaces are planned but not yet implemented.
@@ -744,27 +822,8 @@ These are explicit engineering boundaries, not hidden assumptions.
 
 ## Roadmap
 
-The next stages are organized around one objective: turn the current target-side C compilation loop into a progressively more conventional and eventually self-hosting C environment without abandoning Cell OS verification and capability boundaries.
+The next milestones continue from the working native C system interface toward synthetic Unix namespaces, a broader compiler, and eventually a self-hosting C environment without abandoning Cell OS verification and capability boundaries.
 
-### Native C System Interface
-
-Add the process-facing system interface required by real C utilities:
-
-- file descriptors;
-- `open`;
-- `close`;
-- `read`;
-- `write`;
-- `lseek`;
-- `stdin`, `stdout`, and `stderr`;
-- `errno`;
-- a bounded task-local allocator suitable for the first `malloc`/`free` contract;
-- broader pointers and arrays;
-- user-defined functions;
-- structs where required by the system API;
-- a more useful libc subset.
-
-The goal is to stop growing compiler builtins whenever an operation should instead be represented by a conventional C/POSIX-style system interface.
 
 ### Cell-Native Synthetic Unix Namespaces
 
@@ -777,6 +836,8 @@ Add familiar synthetic namespaces:
 ```
 
 These will be Cell-native VFS projections, not Linux ABI emulation. Familiar names are reused because the concepts are familiar; the implementation and exact data model remain Cell OS mechanisms.
+
+The descriptor API now provides the user-program access path for these namespaces. A compiled C utility should be able to inspect them through ordinary `open`/`read`/`close` operations rather than through new compiler intrinsics.
 
 A likely consequence is that utilities such as `ps` can eventually move out of the trusted shell path and become ordinary C programs that read process state through `/proc`. Device and system inspection can follow the same direction through `/dev` and `/sys`.
 

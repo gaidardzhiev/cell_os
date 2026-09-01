@@ -36,6 +36,12 @@ OPS = {
     "cmpeq": 16, "cmpne": 17, "cmplt": 18, "cmple": 19,
     "cmpgt": 20, "cmpge": 21, "exit": 22, "load64": 23,
     "putsm": 24, "putc": 25, "strlen": 26, "atoi": 27, "strcmpc": 28,
+    "syscall": 29, "call": 30, "ret": 31, "or": 32,
+}
+
+SYSCALLS = {
+    "open": 1, "close": 2, "read": 3, "write": 4, "lseek": 5,
+    "errno": 6, "malloc": 7, "free": 8,
 }
 
 def reg(s):
@@ -150,7 +156,7 @@ def assemble(text):
             elif op == "mov":
                 if len(p) != 3: raise ValueError("mov rD rA")
                 dst, a = reg(p[1]), reg(p[2])
-            elif op in ("add", "sub", "mul", "div", "mod", "cmpeq", "cmpne", "cmplt", "cmple", "cmpgt", "cmpge"):
+            elif op in ("add", "sub", "mul", "div", "mod", "cmpeq", "cmpne", "cmplt", "cmple", "cmpgt", "cmpge", "or"):
                 if len(p) != 4: raise ValueError(f"{op} rD rA rB")
                 dst, a, b = reg(p[1]), reg(p[2]), reg(p[3])
             elif op == "addi":
@@ -198,6 +204,31 @@ def assemble(text):
                 imm, n = data_map[p[3]]
                 if not n or data[imm + n - 1] != 0:
                     raise ValueError("strcmpc data must end with NUL")
+            elif op == "syscall":
+                if len(p) < 3 or p[1] not in SYSCALLS:
+                    raise ValueError("syscall NAME rD [rA [rB [rC]]]")
+                name = p[1]
+                nr = SYSCALLS[name]
+                argc = 0 if name == "errno" else 1 if name in ("close", "malloc", "free") else 2 if name == "open" else 3
+                if len(p) != 3 + argc:
+                    raise ValueError(f"syscall {name} expects {argc} argument registers")
+                dst = reg(p[2])
+                if argc >= 1: a = reg(p[3])
+                if argc >= 2: b = reg(p[4])
+                arg2 = reg(p[5]) if argc >= 3 else 0
+                imm = nr | (arg2 << 8)
+            elif op == "call":
+                if len(p) not in (3, 4, 5):
+                    raise ValueError("call rD LABEL [rA [rB]]")
+                dst = reg(p[1])
+                if p[2] not in labels: raise ValueError(f"unknown label {p[2]}")
+                argc = len(p) - 3
+                if argc >= 1: a = reg(p[3])
+                if argc >= 2: b = reg(p[4])
+                imm = labels[p[2]] | (argc << 24)
+            elif op == "ret":
+                if len(p) != 2: raise ValueError("ret rA")
+                a = reg(p[1])
         except ValueError as e:
             raise ValueError(f"line {lineno}: {e}") from e
         if not -(1 << 31) <= imm < (1 << 31):

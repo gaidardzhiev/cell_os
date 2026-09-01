@@ -6,6 +6,24 @@
 
 static int reg_ok(uint8_t r) { return r < CELL_EXEC_REGS; }
 
+static int syscall_ok(uint8_t nr) {
+	return nr >= CELL_EXEC_SYS_OPEN && nr <= CELL_EXEC_SYS_FREE;
+}
+
+static unsigned syscall_argc(uint8_t nr) {
+	switch (nr) {
+	case CELL_EXEC_SYS_ERRNO: return 0u;
+	case CELL_EXEC_SYS_CLOSE:
+	case CELL_EXEC_SYS_MALLOC:
+	case CELL_EXEC_SYS_FREE: return 1u;
+	case CELL_EXEC_SYS_OPEN: return 2u;
+	case CELL_EXEC_SYS_READ:
+	case CELL_EXEC_SYS_WRITE:
+	case CELL_EXEC_SYS_LSEEK: return 3u;
+	default: return 0u;
+	}
+}
+
 uint32_t cell_exec_crc32(const void *data, size_t bytes) {
 	const uint8_t *p = (const uint8_t *)data;
 	uint32_t crc = 0xFFFFFFFFu;
@@ -96,6 +114,7 @@ cell_exec_status_t cell_exec_open(cell_exec_t *exec, const void *blob, size_t by
 		case CELL_EXEC_OP_CMPLE:
 		case CELL_EXEC_OP_CMPGT:
 		case CELL_EXEC_OP_CMPGE:
+		case CELL_EXEC_OP_OR:
 			if (!reg_ok(in->dst) || !reg_ok(in->a) || !reg_ok(in->b)) return CELL_EXEC_BAD_REGISTER;
 			break;
 		case CELL_EXEC_OP_ADDI:
@@ -142,6 +161,28 @@ cell_exec_status_t cell_exec_open(cell_exec_t *exec, const void *blob, size_t by
 		case CELL_EXEC_OP_STRCMPC:
 			if (!reg_ok(in->dst) || !reg_ok(in->a) || in->imm < 0 ||
 			    !data_cstr_ok(data, h->data_bytes, (uint32_t)in->imm)) return CELL_EXEC_BAD_DATA;
+			break;
+		case CELL_EXEC_OP_SYSCALL: {
+			uint32_t packed = (uint32_t)in->imm;
+			uint8_t nr = CELL_EXEC_SYSCALL_NR(in->imm);
+			uint8_t arg2 = CELL_EXEC_SYSCALL_ARG2(in->imm);
+			if ((packed & 0xffff0000u) != 0u || !syscall_ok(nr) || !reg_ok(in->dst)) return CELL_EXEC_BAD_OPCODE;
+			unsigned argc = syscall_argc(nr);
+			if (argc >= 1u && !reg_ok(in->a)) return CELL_EXEC_BAD_REGISTER;
+			if (argc >= 2u && !reg_ok(in->b)) return CELL_EXEC_BAD_REGISTER;
+			if (argc >= 3u && !reg_ok(arg2)) return CELL_EXEC_BAD_REGISTER;
+			break;
+		}
+		case CELL_EXEC_OP_CALL: {
+			uint8_t argc = CELL_EXEC_CALL_ARGC(in->imm);
+			uint32_t target = CELL_EXEC_CALL_TARGET(in->imm);
+			if (!reg_ok(in->dst) || argc > 2u || target >= count) return CELL_EXEC_BAD_BRANCH;
+			if (argc >= 1u && !reg_ok(in->a)) return CELL_EXEC_BAD_REGISTER;
+			if (argc >= 2u && !reg_ok(in->b)) return CELL_EXEC_BAD_REGISTER;
+			break;
+		}
+		case CELL_EXEC_OP_RET:
+			if (!reg_ok(in->a)) return CELL_EXEC_BAD_REGISTER;
 			break;
 		default:
 			return CELL_EXEC_BAD_OPCODE;

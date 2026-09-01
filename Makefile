@@ -43,7 +43,7 @@ KERNEL_SRCS := \
 KERNEL_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(KERNEL_SRCS))
 KERNEL_ENTRY_OBJ := $(BUILD_DIR)/src/kernel/kernel_entry.o
 
-.PHONY: all clean reset-cellfs cortex-model cell-programs install-cell-programs test-cortex-host test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-cc test-c-runtime test-shell test-exec-tools test-program-image test-cortex-session test-caploop cortex-x86 run-cortex-x86 check-tools
+.PHONY: all clean reset-cellfs cortex-model cell-programs install-cell-programs test-cortex-host test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-cc test-c-runtime test-c-system test-shell test-exec-tools test-program-image test-cortex-session test-caploop cortex-x86 run-cortex-x86 check-tools
 all: cortex-x86
 
 check-tools:
@@ -64,21 +64,21 @@ $(KERNEL_ENTRY_OBJ): src/kernel/kernel_entry.S
 	@mkdir -p $(dir $@)
 	$(CC) -m64 -mno-red-zone -c $< -o $@
 
-$(BUILD_DIR)/src/core/cc.o: src/core/cc.c include/core/cc.h include/core/cellexec.h include/core/capability.h
+$(BUILD_DIR)/src/core/cc.o: src/core/cc.c include/core/cc.h include/core/cellexec.h include/core/capability.h include/core/syscall.h
 	@mkdir -p $(dir $@)
-	$(CC) $(KERNEL_CFLAGS) -c $< -o $@
+	$(CC) $(filter-out -O2,$(KERNEL_CFLAGS)) -Os -c $< -o $@
 
 $(BUILD_DIR)/src/core/cellexec.o: src/core/cellexec.c include/core/cellexec.h
 	@mkdir -p $(dir $@)
-	$(CC) $(KERNEL_CFLAGS) -c $< -o $@
+	$(CC) $(filter-out -O2,$(KERNEL_CFLAGS)) -Os -c $< -o $@
 
-$(BUILD_DIR)/src/core/task.o: src/core/task.c include/core/task.h include/core/cellexec.h include/core/capability.h include/core/vfs.h
+$(BUILD_DIR)/src/core/task.o: src/core/task.c include/core/task.h include/core/cellexec.h include/core/capability.h include/core/vfs.h include/core/syscall.h
 	@mkdir -p $(dir $@)
-	$(CC) $(KERNEL_CFLAGS) -c $< -o $@
+	$(CC) $(filter-out -O2,$(KERNEL_CFLAGS)) -Os -c $< -o $@
 
 $(BUILD_DIR)/src/core/shell.o: src/core/shell.c include/core/shell.h include/core/cc.h include/core/task.h include/core/vfs.h
 	@mkdir -p $(dir $@)
-	$(CC) $(KERNEL_CFLAGS) -c $< -o $@
+	$(CC) $(filter-out -O2,$(KERNEL_CFLAGS)) -Os -c $< -o $@
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -111,7 +111,7 @@ reset-cellfs:
 	@$(MAKE) $(CELLFS_IMAGE)
 
 
-$(HOST_CC): tools/cc.c src/core/cc.c src/core/cellexec.c include/core/cc.h include/core/cellexec.h include/core/capability.h
+$(HOST_CC): tools/cc.c src/core/cc.c src/core/cellexec.c include/core/cc.h include/core/cellexec.h include/core/capability.h include/core/syscall.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
 		tools/cc.c src/core/cc.c src/core/cellexec.c -o $@
@@ -201,6 +201,14 @@ $(BUILD_DIR)/test_c_runtime: src/core/cc.c src/core/cellexec.c src/core/task.c s
 test-c-runtime: $(BUILD_DIR)/test_c_runtime
 	@$(BUILD_DIR)/test_c_runtime
 
+$(BUILD_DIR)/test_c_system: src/core/cc.c src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_c_system.c include/core/cc.h include/core/cellexec.h include/core/task.h include/core/vfs.h include/core/syscall.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
+		src/core/cc.c src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_c_system.c -o $@
+
+test-c-system: $(BUILD_DIR)/test_c_system
+	@$(BUILD_DIR)/test_c_system
+
 $(BUILD_DIR)/test_shell: src/core/shell.c src/core/cc.c src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_shell.c include/core/shell.h include/core/cc.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
@@ -237,7 +245,7 @@ $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN) $(CORTEX_MODEL) $(CELLFS_
 	@mkdir -p $(BUILD_DIR)
 	python3 scripts/pack_disk.py $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN) $@ --model $(CORTEX_MODEL) --cellfs $(CELLFS_IMAGE)
 
-test-caploop: test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-cc test-c-runtime test-shell test-exec-tools test-program-image test-cortex-host test-cortex-session
+test-caploop: test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-cc test-c-runtime test-c-system test-shell test-exec-tools test-program-image test-cortex-host test-cortex-session
 
 cortex-x86: check-tools test-caploop $(DISK_IMG)
 	@echo '#CORTEX x86 image ready:' $(DISK_IMG)

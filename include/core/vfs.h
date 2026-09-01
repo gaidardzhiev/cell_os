@@ -10,6 +10,11 @@
 #define CELL_VFS_PATH_MAX 128u
 #define CELL_VFS_TEXT_MAX 512u
 
+#define CELL_VFS_OPEN_READ 0x01u
+#define CELL_VFS_OPEN_WRITE 0x02u
+#define CELL_VFS_OPEN_CREATE 0x04u
+#define CELL_VFS_OPEN_TRUNCATE 0x08u
+
 typedef struct cell_capability_env cell_capability_env_t;
 
 typedef enum {
@@ -51,6 +56,12 @@ cell_vfs_status_t cell_vfs_cat(cell_vfs_t *vfs, const cell_capability_env_t *env
 	const char *path, char *out, size_t cap);
 cell_vfs_status_t cell_vfs_read_bytes(cell_vfs_t *vfs, const char *path,
 	void *dst, size_t cap, size_t *bytes_out);
+cell_vfs_status_t cell_vfs_open_file(cell_vfs_t *vfs, const cell_capability_env_t *env,
+	const char *path, uint32_t mode, char absolute[CELL_VFS_PATH_MAX], size_t *size_out);
+cell_vfs_status_t cell_vfs_read_at(cell_vfs_t *vfs, const cell_capability_env_t *env,
+	const char *path, size_t offset, void *dst, size_t cap, size_t *bytes_out);
+cell_vfs_status_t cell_vfs_write_at(cell_vfs_t *vfs, const char *path, size_t offset,
+	const void *data, size_t bytes, size_t *size_out);
 cell_vfs_status_t cell_vfs_mkdir(cell_vfs_t *vfs, const char *path);
 cell_vfs_status_t cell_vfs_touch(cell_vfs_t *vfs, const char *path);
 cell_vfs_status_t cell_vfs_write(cell_vfs_t *vfs, const char *path, const char *text, int append);

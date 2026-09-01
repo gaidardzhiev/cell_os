@@ -371,6 +371,132 @@ cell_vfs_status_t cell_vfs_cat(cell_vfs_t *vfs, const cell_capability_env_t *env
 	return CELL_VFS_OK;
 }
 
+static cell_vfs_status_t create_common(cell_vfs_t *vfs, const char *path, int directory);
+
+static cell_vfs_status_t virtual_read_text(cell_vfs_t *vfs, const cell_capability_env_t *env,
+	const char *absolute, char *out, size_t cap, size_t *bytes_out) {
+	cell_vfs_status_t status = cell_vfs_cat(vfs, env, absolute, out, cap);
+	if (status != CELL_VFS_OK) return status;
+	if (bytes_out) *bytes_out = str_len(out);
+	return CELL_VFS_OK;
+}
+
+cell_vfs_status_t cell_vfs_open_file(cell_vfs_t *vfs, const cell_capability_env_t *env,
+	const char *path, uint32_t mode, char absolute[CELL_VFS_PATH_MAX], size_t *size_out) {
+	if (size_out) *size_out = 0;
+	if (!vfs || !vfs->mounted || !absolute || !cell_vfs_normalize(vfs, path, absolute))
+		return CELL_VFS_INVALID;
+	if (!(mode & (CELL_VFS_OPEN_READ | CELL_VFS_OPEN_WRITE))) return CELL_VFS_INVALID;
+	if (mode & ~(CELL_VFS_OPEN_READ | CELL_VFS_OPEN_WRITE | CELL_VFS_OPEN_CREATE | CELL_VFS_OPEN_TRUNCATE))
+		return CELL_VFS_INVALID;
+
+	if (is_persistent_path(absolute)) {
+		uint32_t id = 0;
+		cell_vfs_status_t status = resolve_persistent(vfs, absolute, &id);
+		if (status == CELL_VFS_NOT_FOUND && (mode & CELL_VFS_OPEN_CREATE)) {
+			status = create_common(vfs, absolute, 0);
+			if (status != CELL_VFS_OK) return status;
+			status = resolve_persistent(vfs, absolute, &id);
+		}
+		if (status != CELL_VFS_OK) return status;
+		const cellfs_inode_t *ino = cellfs_inode(&vfs->fs, id);
+		if (!ino) return CELL_VFS_NOT_FOUND;
+		if (ino->type == CELLFS_TYPE_DIR) return CELL_VFS_IS_DIR;
+		if ((mode & CELL_VFS_OPEN_TRUNCATE) && (mode & CELL_VFS_OPEN_WRITE)) {
+			static const uint8_t empty = 0;
+			if (!cellfs_write_file(&vfs->fs, id, &empty, 0, 0)) return CELL_VFS_IO;
+			ino = cellfs_inode(&vfs->fs, id);
+		}
+		if (size_out) *size_out = ino ? ino->size : 0u;
+		return CELL_VFS_OK;
+	}
+
+	if (mode & (CELL_VFS_OPEN_WRITE | CELL_VFS_OPEN_CREATE | CELL_VFS_OPEN_TRUNCATE))
+		return CELL_VFS_READ_ONLY;
+	if (is_virtual_dir(absolute)) return CELL_VFS_IS_DIR;
+	char tmp[CELL_VFS_TEXT_MAX];
+	size_t bytes = 0;
+	cell_vfs_status_t status = virtual_read_text(vfs, env, absolute, tmp, sizeof(tmp), &bytes);
+	if (status != CELL_VFS_OK) return status;
+	if (size_out) *size_out = bytes;
+	return CELL_VFS_OK;
+}
+
+cell_vfs_status_t cell_vfs_read_at(cell_vfs_t *vfs, const cell_capability_env_t *env,
+	const char *path, size_t offset, void *dst, size_t cap, size_t *bytes_out) {
+	if (bytes_out) *bytes_out = 0;
+	if (!vfs || !vfs->mounted || (!dst && cap)) return CELL_VFS_INVALID;
+	char absolute[CELL_VFS_PATH_MAX];
+	if (!cell_vfs_normalize(vfs, path, absolute)) return CELL_VFS_INVALID;
+
+	if (is_persistent_path(absolute)) {
+		uint32_t id = 0;
+		cell_vfs_status_t status = resolve_persistent(vfs, absolute, &id);
+		if (status != CELL_VFS_OK) return status;
+		const cellfs_inode_t *ino = cellfs_inode(&vfs->fs, id);
+		if (!ino) return CELL_VFS_NOT_FOUND;
+		if (ino->type == CELLFS_TYPE_DIR) return CELL_VFS_IS_DIR;
+		if (offset >= ino->size || !cap) return CELL_VFS_OK;
+		size_t total = 0;
+		if (!cellfs_read_file(&vfs->fs, id, vfs->fs.scratch, sizeof(vfs->fs.scratch), &total))
+			return CELL_VFS_IO;
+		size_t n = total - offset;
+		if (n > cap) n = cap;
+		uint8_t *d = (uint8_t *)dst;
+		for (size_t i = 0; i < n; ++i) d[i] = vfs->fs.scratch[offset + i];
+		if (bytes_out) *bytes_out = n;
+		return CELL_VFS_OK;
+	}
+
+	if (is_virtual_dir(absolute)) return CELL_VFS_IS_DIR;
+	char tmp[CELL_VFS_TEXT_MAX];
+	size_t total = 0;
+	cell_vfs_status_t status = virtual_read_text(vfs, env, absolute, tmp, sizeof(tmp), &total);
+	if (status != CELL_VFS_OK) return status;
+	if (offset >= total || !cap) return CELL_VFS_OK;
+	size_t n = total - offset;
+	if (n > cap) n = cap;
+	uint8_t *d = (uint8_t *)dst;
+	for (size_t i = 0; i < n; ++i) d[i] = (uint8_t)tmp[offset + i];
+	if (bytes_out) *bytes_out = n;
+	return CELL_VFS_OK;
+}
+
+cell_vfs_status_t cell_vfs_write_at(cell_vfs_t *vfs, const char *path, size_t offset,
+	const void *data, size_t bytes, size_t *size_out) {
+	if (size_out) *size_out = 0;
+	if (!vfs || !vfs->mounted || (!data && bytes)) return CELL_VFS_INVALID;
+	char absolute[CELL_VFS_PATH_MAX];
+	if (!cell_vfs_normalize(vfs, path, absolute)) return CELL_VFS_INVALID;
+	if (!is_persistent_path(absolute)) return CELL_VFS_READ_ONLY;
+	uint32_t id = 0;
+	cell_vfs_status_t status = resolve_persistent(vfs, absolute, &id);
+	if (status != CELL_VFS_OK) return status;
+	const cellfs_inode_t *ino = cellfs_inode(&vfs->fs, id);
+	if (!ino) return CELL_VFS_NOT_FOUND;
+	if (ino->type == CELLFS_TYPE_DIR) return CELL_VFS_IS_DIR;
+	if (offset > CELLFS_FILE_MAX || bytes > CELLFS_FILE_MAX - offset) return CELL_VFS_TOO_LARGE;
+
+	size_t old_size = ino->size;
+	if (old_size) {
+		size_t got = 0;
+		if (!cellfs_read_file(&vfs->fs, id, vfs->fs.scratch, sizeof(vfs->fs.scratch), &got) || got != old_size)
+			return CELL_VFS_IO;
+	}
+	if (offset > old_size) {
+		for (size_t i = old_size; i < offset; ++i) vfs->fs.scratch[i] = 0;
+	}
+	const uint8_t *src = (const uint8_t *)data;
+	for (size_t i = 0; i < bytes; ++i) vfs->fs.scratch[offset + i] = src[i];
+	size_t total = old_size;
+	if (offset + bytes > total) total = offset + bytes;
+	static const uint8_t empty = 0;
+	const void *payload = total ? (const void *)vfs->fs.scratch : (const void *)&empty;
+	if (!cellfs_write_file(&vfs->fs, id, payload, total, 0)) return CELL_VFS_FULL;
+	if (size_out) *size_out = total;
+	return CELL_VFS_OK;
+}
+
 cell_vfs_status_t cell_vfs_read_bytes(cell_vfs_t *vfs, const char *path,
 	void *dst, size_t cap, size_t *bytes_out) {
 	char absolute[CELL_VFS_PATH_MAX];

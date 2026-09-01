@@ -6,4 +6,6 @@
 #ifndef _CELL_STDLIB_H
 #define _CELL_STDLIB_H
 int atoi(const char *s);
+char *malloc(int size);
+void free(char *ptr);
 #endif

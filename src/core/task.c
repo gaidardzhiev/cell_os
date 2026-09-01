@@ -5,6 +5,7 @@
 #include "core/task.h"
 #include "core/capability.h"
 #include "core/vfs.h"
+#include "core/syscall.h"
 
 typedef struct {
 	char *p;
@@ -68,6 +69,7 @@ const char *cell_task_fault_name(cell_task_fault_t fault) {
 	case CELL_TASK_FAULT_OUTPUT: return "output";
 	case CELL_TASK_FAULT_ARGUMENT: return "argument";
 	case CELL_TASK_FAULT_ARITHMETIC: return "arithmetic";
+	case CELL_TASK_FAULT_STACK: return "stack";
 	case CELL_TASK_FAULT_INSTRUCTION: return "instruction";
 	default: return "unknown";
 	}
@@ -120,23 +122,61 @@ static int output_bytes(outbuf_t *b, const uint8_t *p, uint32_t n) {
 	return 1;
 }
 
-static int memory_cstr(const cell_exec_t *exec, const uint8_t *memory,
-	uint64_t addr, uint32_t *length) {
+static int pointer_span(const cell_exec_t *exec, uint8_t *memory,
+	uint64_t addr, uint32_t bytes, int writable, uint8_t **ptr) {
+	if (addr >= CELL_EXEC_DATA_BASE) {
+		uint64_t off = addr - CELL_EXEC_DATA_BASE;
+		if (writable || off > exec->h->data_bytes || bytes > exec->h->data_bytes - off) return 0;
+		if (ptr) *ptr = (uint8_t *)(uintptr_t)(exec->data + (uint32_t)off);
+		return 1;
+	}
+	if (addr > exec->h->memory_bytes || bytes > exec->h->memory_bytes - addr) return 0;
+	if (ptr) *ptr = memory + (uint32_t)addr;
+	return 1;
+}
+
+static int pointer_cstr(const cell_exec_t *exec, uint8_t *memory,
+	uint64_t addr, uint32_t *length, const uint8_t **ptr) {
+	if (addr >= CELL_EXEC_DATA_BASE) {
+		uint64_t off64 = addr - CELL_EXEC_DATA_BASE;
+		if (off64 >= exec->h->data_bytes) return 0;
+		uint32_t off = (uint32_t)off64;
+		for (uint32_t i = off; i < exec->h->data_bytes; ++i) {
+			if (exec->data[i] == 0u) {
+				if (length) *length = i - off;
+				if (ptr) *ptr = exec->data + off;
+				return 1;
+			}
+		}
+		return 0;
+	}
 	if (addr >= exec->h->memory_bytes) return 0;
 	for (uint32_t i = (uint32_t)addr; i < exec->h->memory_bytes; ++i) {
 		if (memory[i] == 0u) {
 			if (length) *length = i - (uint32_t)addr;
+			if (ptr) *ptr = memory + (uint32_t)addr;
 			return 1;
 		}
 	}
 	return 0;
 }
 
-static int output_memory_string(outbuf_t *b, const cell_exec_t *exec,
-	const uint8_t *memory, uint64_t addr, int newline) {
+static int copy_pointer_cstr(const cell_exec_t *exec, uint8_t *memory,
+	uint64_t addr, char *dst, size_t cap) {
 	uint32_t n = 0;
-	if (!memory_cstr(exec, memory, addr, &n)) return 0;
-	if (!output_bytes(b, memory + (uint32_t)addr, n)) return 0;
+	const uint8_t *src = 0;
+	if (!dst || !cap || !pointer_cstr(exec, memory, addr, &n, &src) || (size_t)n + 1u > cap) return 0;
+	for (uint32_t i = 0; i < n; ++i) dst[i] = (char)src[i];
+	dst[n] = 0;
+	return 1;
+}
+
+static int output_pointer_string(outbuf_t *b, const cell_exec_t *exec,
+	uint8_t *memory, uint64_t addr, int newline) {
+	uint32_t n = 0;
+	const uint8_t *p = 0;
+	if (!pointer_cstr(exec, memory, addr, &n, &p)) return 0;
+	if (!output_bytes(b, p, n)) return 0;
 	if (newline) ob_char(b, '\n');
 	return b->ok;
 }
@@ -169,9 +209,27 @@ static uint64_t load_u64(const uint8_t *memory, uint32_t off) {
 	return value;
 }
 
+static void reset_process_state(cell_task_manager_t *tm) {
+	zero_bytes(tm->fds, sizeof(tm->fds));
+	zero_bytes(tm->heap, sizeof(tm->heap));
+	zero_bytes(tm->calls, sizeof(tm->calls));
+	tm->heap_next = 16u;
+	tm->call_depth = 0u;
+	tm->errno_value = 0;
+	tm->fds[CELL_STDIN_FILENO].used = 1u;
+	tm->fds[CELL_STDIN_FILENO].readable = 1u;
+	tm->fds[CELL_STDOUT_FILENO].used = 1u;
+	tm->fds[CELL_STDOUT_FILENO].writable = 1u;
+	tm->fds[CELL_STDERR_FILENO].used = 1u;
+	tm->fds[CELL_STDERR_FILENO].writable = 1u;
+}
+
 static int prepare_argv(cell_task_manager_t *tm, const cell_exec_t *exec,
 	uint32_t argc, const char *const argv[]) {
-	if (!argc) return 1;
+	if (!argc) {
+		tm->heap_next = 16u;
+		return tm->heap_next <= exec->h->memory_bytes || exec->h->memory_bytes == 0u;
+	}
 	if (!argv || argc > CELL_TASK_ARGC_MAX) return 0;
 	const uint32_t table = 16u;
 	uint32_t pos = table + (argc + 1u) * 8u;
@@ -182,7 +240,6 @@ static int prepare_argv(cell_task_manager_t *tm, const cell_exec_t *exec,
 		pos += (uint32_t)n + 1u;
 	}
 	if (pos > exec->h->memory_bytes) {
-		/* Old CellExec images with no task memory still run without argv data. */
 		if (argc == 1u) return 1;
 		return 0;
 	}
@@ -197,22 +254,24 @@ static int prepare_argv(cell_task_manager_t *tm, const cell_exec_t *exec,
 	store_u64(tm->memory, table + argc * 8u, 0u);
 	tm->regs[0] = argc;
 	tm->regs[1] = table;
-	return 1;
+	tm->heap_next = (pos + 7u) & ~7u;
+	return tm->heap_next <= exec->h->memory_bytes;
 }
 
-static int atoi_memory(const cell_exec_t *exec, const uint8_t *memory,
+static int atoi_memory(const cell_exec_t *exec, uint8_t *memory,
 	uint64_t addr, int64_t *value) {
 	uint32_t n = 0;
-	if (!memory_cstr(exec, memory, addr, &n)) return 0;
+	const uint8_t *src = 0;
+	if (!pointer_cstr(exec, memory, addr, &n, &src)) return 0;
 	uint32_t i = 0;
-	while (i < n && (memory[(uint32_t)addr + i] == ' ' || memory[(uint32_t)addr + i] == '\t')) ++i;
+	while (i < n && (src[i] == ' ' || src[i] == '\t')) ++i;
 	int neg = 0;
-	if (i < n && (memory[(uint32_t)addr + i] == '+' || memory[(uint32_t)addr + i] == '-')) {
-		neg = memory[(uint32_t)addr + i] == '-'; ++i;
+	if (i < n && (src[i] == '+' || src[i] == '-')) {
+		neg = src[i] == '-'; ++i;
 	}
 	int64_t v = 0;
 	while (i < n) {
-		uint8_t c = memory[(uint32_t)addr + i];
+		uint8_t c = src[i];
 		if (c < '0' || c > '9') break;
 		if (v > 2147483647ll / 10ll) { v = 2147483647ll; break; }
 		v = v * 10ll + (c - '0');
@@ -223,18 +282,218 @@ static int atoi_memory(const cell_exec_t *exec, const uint8_t *memory,
 	return 1;
 }
 
-static int strcmp_memory_data(const cell_exec_t *exec, const uint8_t *memory,
+static int strcmp_memory_data(const cell_exec_t *exec, uint8_t *memory,
 	uint64_t addr, uint32_t data_off, int64_t *value) {
 	uint32_t n = 0;
-	if (!memory_cstr(exec, memory, addr, &n) || data_off >= exec->h->data_bytes) return 0;
+	const uint8_t *src = 0;
+	if (!pointer_cstr(exec, memory, addr, &n, &src) || data_off >= exec->h->data_bytes) return 0;
 	uint32_t i = 0;
 	for (;;) {
-		uint8_t a = i <= n ? memory[(uint32_t)addr + i] : 0u;
+		uint8_t a = i <= n ? src[i] : 0u;
 		if (data_off + i >= exec->h->data_bytes) return 0;
 		uint8_t b = exec->data[data_off + i];
 		if (a != b) { *value = a < b ? -1 : 1; return 1; }
 		if (!a) { *value = 0; return 1; }
 		++i;
+	}
+}
+
+static int str_starts_task(const char *s, const char *prefix) {
+	if (!s || !prefix) return 0;
+	while (*prefix) if (*s++ != *prefix++) return 0;
+	return 1;
+}
+
+static int task_path_writable(const char *absolute) {
+	return str_starts_task(absolute, "/home/");
+}
+
+static int vfs_errno(cell_vfs_status_t status) {
+	switch (status) {
+	case CELL_VFS_NOT_FOUND: return CELL_ENOENT;
+	case CELL_VFS_NOT_DIR: return CELL_ENOTDIR;
+	case CELL_VFS_IS_DIR: return CELL_EISDIR;
+	case CELL_VFS_READ_ONLY: return CELL_EROFS;
+	case CELL_VFS_EXISTS: return CELL_EEXIST;
+	case CELL_VFS_FULL: return CELL_ENOSPC;
+	case CELL_VFS_INVALID: return CELL_EINVAL;
+	case CELL_VFS_IO: return CELL_EIO;
+	case CELL_VFS_NOT_EMPTY: return CELL_ENOTEMPTY;
+	case CELL_VFS_TOO_LARGE: return CELL_EFBIG;
+	default: return CELL_EIO;
+	}
+}
+
+static int64_t syscall_fail(cell_task_manager_t *tm, int err) {
+	tm->errno_value = err;
+	return -1;
+}
+
+static int fd_valid(const cell_task_manager_t *tm, int fd) {
+	return fd >= 0 && fd < (int)CELL_TASK_FD_MAX && tm->fds[fd].used;
+}
+
+static int alloc_fd(cell_task_manager_t *tm) {
+	for (int fd = 3; fd < (int)CELL_TASK_FD_MAX; ++fd) if (!tm->fds[fd].used) return fd;
+	return -1;
+}
+
+static int64_t sys_open(cell_task_manager_t *tm, cell_vfs_t *vfs,
+	const cell_capability_env_t *env, const cell_exec_t *exec, uint64_t path_addr, uint64_t flags64) {
+	char path[CELL_VFS_PATH_MAX];
+	if (!copy_pointer_cstr(exec, tm->memory, path_addr, path, sizeof(path))) return syscall_fail(tm, CELL_EFAULT);
+	if (flags64 > 0x7fffffffu) return syscall_fail(tm, CELL_EINVAL);
+	int flags = (int)flags64;
+	int access = flags & CELL_O_ACCMODE;
+	if (access != CELL_O_RDONLY && access != CELL_O_WRONLY && access != CELL_O_RDWR)
+		return syscall_fail(tm, CELL_EINVAL);
+	if (flags & ~(CELL_O_ACCMODE | CELL_O_CREAT | CELL_O_TRUNC | CELL_O_APPEND))
+		return syscall_fail(tm, CELL_EINVAL);
+	int readable = access == CELL_O_RDONLY || access == CELL_O_RDWR;
+	int writable = access == CELL_O_WRONLY || access == CELL_O_RDWR;
+	uint32_t mode = readable ? CELL_VFS_OPEN_READ : 0u;
+	if (writable) mode |= CELL_VFS_OPEN_WRITE;
+	if (flags & CELL_O_CREAT) mode |= CELL_VFS_OPEN_CREATE;
+	if (flags & CELL_O_TRUNC) {
+		if (!writable) return syscall_fail(tm, CELL_EINVAL);
+		mode |= CELL_VFS_OPEN_TRUNCATE;
+	}
+	char absolute[CELL_VFS_PATH_MAX];
+	if (!cell_vfs_normalize(vfs, path, absolute)) return syscall_fail(tm, CELL_EINVAL);
+	if (writable && !task_path_writable(absolute)) return syscall_fail(tm, CELL_EACCES);
+	size_t size = 0;
+	cell_vfs_status_t st = cell_vfs_open_file(vfs, env, absolute, mode, path, &size);
+	if (st != CELL_VFS_OK) return syscall_fail(tm, vfs_errno(st));
+	int fd = alloc_fd(tm);
+	if (fd < 0) return syscall_fail(tm, CELL_EMFILE);
+	cell_task_fd_t *f = &tm->fds[fd];
+	zero_bytes(f, sizeof(*f));
+	f->used = 1u; f->readable = (uint8_t)readable; f->writable = (uint8_t)writable;
+	f->append = (uint8_t)((flags & CELL_O_APPEND) != 0);
+	f->offset = f->append ? (uint32_t)size : 0u;
+	copy_text(f->path, sizeof(f->path), path);
+	return fd;
+}
+
+static int64_t sys_close(cell_task_manager_t *tm, int64_t fd64) {
+	if (fd64 < 0 || fd64 >= (int64_t)CELL_TASK_FD_MAX || !fd_valid(tm, (int)fd64))
+		return syscall_fail(tm, CELL_EBADF);
+	zero_bytes(&tm->fds[(int)fd64], sizeof(tm->fds[0]));
+	return 0;
+}
+
+static int64_t sys_read(cell_task_manager_t *tm, cell_vfs_t *vfs,
+	const cell_capability_env_t *env, const cell_exec_t *exec, int64_t fd64,
+	uint64_t addr, uint64_t count64) {
+	if (fd64 < 0 || fd64 >= (int64_t)CELL_TASK_FD_MAX || !fd_valid(tm, (int)fd64) || !tm->fds[(int)fd64].readable)
+		return syscall_fail(tm, CELL_EBADF);
+	if (count64 > 0xffffffffu) return syscall_fail(tm, CELL_EINVAL);
+	uint32_t count = (uint32_t)count64;
+	uint8_t *dst = 0;
+	if (!pointer_span(exec, tm->memory, addr, count, 1, &dst)) return syscall_fail(tm, CELL_EFAULT);
+	if ((int)fd64 == CELL_STDIN_FILENO) { return 0; }
+	cell_task_fd_t *f = &tm->fds[(int)fd64];
+	size_t got = 0;
+	cell_vfs_status_t st = cell_vfs_read_at(vfs, env, f->path, f->offset, dst, count, &got);
+	if (st != CELL_VFS_OK) return syscall_fail(tm, vfs_errno(st));
+	f->offset += (uint32_t)got;
+	return (int64_t)got;
+}
+
+static int64_t sys_write(cell_task_manager_t *tm, cell_vfs_t *vfs,
+	const cell_capability_env_t *env, const cell_exec_t *exec, outbuf_t *out,
+	int64_t fd64, uint64_t addr, uint64_t count64) {
+	if (fd64 < 0 || fd64 >= (int64_t)CELL_TASK_FD_MAX || !fd_valid(tm, (int)fd64) || !tm->fds[(int)fd64].writable)
+		return syscall_fail(tm, CELL_EBADF);
+	if (count64 > 0xffffffffu) return syscall_fail(tm, CELL_EINVAL);
+	uint32_t count = (uint32_t)count64;
+	uint8_t *src = 0;
+	if (!pointer_span(exec, tm->memory, addr, count, 0, &src)) return syscall_fail(tm, CELL_EFAULT);
+	if ((int)fd64 == CELL_STDOUT_FILENO || (int)fd64 == CELL_STDERR_FILENO) {
+		if (!output_bytes(out, src, count)) return syscall_fail(tm, CELL_EIO);
+		return count;
+	}
+	cell_task_fd_t *f = &tm->fds[(int)fd64];
+	if (f->append) {
+		char absolute[CELL_VFS_PATH_MAX]; size_t size = 0;
+		cell_vfs_status_t ost = cell_vfs_open_file(vfs, env, f->path, CELL_VFS_OPEN_WRITE, absolute, &size);
+		if (ost != CELL_VFS_OK) return syscall_fail(tm, vfs_errno(ost));
+		f->offset = (uint32_t)size;
+	}
+	size_t size = 0;
+	cell_vfs_status_t st = cell_vfs_write_at(vfs, f->path, f->offset, src, count, &size);
+	if (st != CELL_VFS_OK) return syscall_fail(tm, vfs_errno(st));
+	f->offset += count;
+	return count;
+}
+
+static int64_t sys_lseek(cell_task_manager_t *tm, cell_vfs_t *vfs,
+	const cell_capability_env_t *env, int64_t fd64, int64_t off, int64_t whence) {
+	if (fd64 < 0 || fd64 >= (int64_t)CELL_TASK_FD_MAX || !fd_valid(tm, (int)fd64))
+		return syscall_fail(tm, CELL_EBADF);
+	if (fd64 <= CELL_STDERR_FILENO) return syscall_fail(tm, CELL_ESPIPE);
+	cell_task_fd_t *f = &tm->fds[(int)fd64];
+	int64_t base = 0;
+	if (whence == CELL_SEEK_SET) base = 0;
+	else if (whence == CELL_SEEK_CUR) base = f->offset;
+	else if (whence == CELL_SEEK_END) {
+		char absolute[CELL_VFS_PATH_MAX]; size_t size = 0;
+		uint32_t mode = f->writable ? CELL_VFS_OPEN_WRITE : CELL_VFS_OPEN_READ;
+		cell_vfs_status_t st = cell_vfs_open_file(vfs, env, f->path, mode, absolute, &size);
+		if (st != CELL_VFS_OK) return syscall_fail(tm, vfs_errno(st));
+		base = (int64_t)size;
+	} else return syscall_fail(tm, CELL_EINVAL);
+	int64_t pos = base + off;
+	if (pos < 0 || pos > (int64_t)CELLFS_FILE_MAX) return syscall_fail(tm, CELL_EINVAL);
+	f->offset = (uint32_t)pos;
+	return pos;
+}
+
+static int64_t sys_malloc(cell_task_manager_t *tm, const cell_exec_t *exec, uint64_t size64) {
+	if (!size64) { return 0; }
+	if (size64 > CELL_EXEC_MEMORY_MAX) return syscall_fail(tm, CELL_ENOMEM);
+	uint32_t size = ((uint32_t)size64 + 7u) & ~7u;
+	for (uint32_t i = 0; i < CELL_TASK_HEAP_BLOCKS; ++i) {
+		cell_task_heap_block_t *b = &tm->heap[i];
+		if (!b->used && b->size >= size && b->offset) {
+			b->used = 1u;
+			return b->offset;
+		}
+	}
+	uint32_t slot = CELL_TASK_HEAP_BLOCKS;
+	for (uint32_t i = 0; i < CELL_TASK_HEAP_BLOCKS; ++i) if (!tm->heap[i].offset) { slot = i; break; }
+	if (slot == CELL_TASK_HEAP_BLOCKS || tm->heap_next > exec->h->memory_bytes || size > exec->h->memory_bytes - tm->heap_next)
+		return syscall_fail(tm, CELL_ENOMEM);
+	cell_task_heap_block_t *b = &tm->heap[slot];
+	b->offset = tm->heap_next; b->size = size; b->used = 1u;
+	tm->heap_next += size;
+	return b->offset;
+}
+
+static int64_t sys_free(cell_task_manager_t *tm, uint64_t addr) {
+	if (!addr) { return 0; }
+	for (uint32_t i = 0; i < CELL_TASK_HEAP_BLOCKS; ++i) {
+		if (tm->heap[i].used && tm->heap[i].offset == addr) {
+			tm->heap[i].used = 0u;
+			return 0;
+		}
+	}
+	return syscall_fail(tm, CELL_EINVAL);
+}
+
+static int64_t execute_syscall(cell_task_manager_t *tm, cell_vfs_t *vfs,
+	const cell_capability_env_t *env, const cell_exec_t *exec, outbuf_t *out,
+	uint8_t nr, uint64_t a0, uint64_t a1, uint64_t a2) {
+	switch (nr) {
+	case CELL_EXEC_SYS_OPEN: return sys_open(tm, vfs, env, exec, a0, a1);
+	case CELL_EXEC_SYS_CLOSE: return sys_close(tm, (int64_t)a0);
+	case CELL_EXEC_SYS_READ: return sys_read(tm, vfs, env, exec, (int64_t)a0, a1, a2);
+	case CELL_EXEC_SYS_WRITE: return sys_write(tm, vfs, env, exec, out, (int64_t)a0, a1, a2);
+	case CELL_EXEC_SYS_LSEEK: return sys_lseek(tm, vfs, env, (int64_t)a0, (int64_t)a1, (int64_t)a2);
+	case CELL_EXEC_SYS_ERRNO: return tm->errno_value;
+	case CELL_EXEC_SYS_MALLOC: return sys_malloc(tm, exec, a0);
+	case CELL_EXEC_SYS_FREE: return sys_free(tm, a0);
+	default: return syscall_fail(tm, CELL_EINVAL);
 	}
 }
 
@@ -279,6 +538,7 @@ static int run_impl(cell_task_manager_t *tm, cell_vfs_t *vfs,
 	r->granted_caps = r->declared_caps;
 	zero_bytes(tm->regs, sizeof(tm->regs));
 	zero_bytes(tm->memory, sizeof(tm->memory));
+	reset_process_state(tm);
 	if (!prepare_argv(tm, &exec, argc, argv)) {
 		fault(r, CELL_TASK_FAULT_ARGUMENT);
 		ob_str(&b, absolute); ob_str(&b, ": Argument list too large.");
@@ -317,6 +577,7 @@ static int run_impl(cell_task_manager_t *tm, cell_vfs_t *vfs,
 		case CELL_EXEC_OP_CMPLE: tm->regs[in->dst] = (int64_t)tm->regs[in->a] <= (int64_t)tm->regs[in->b]; break;
 		case CELL_EXEC_OP_CMPGT: tm->regs[in->dst] = (int64_t)tm->regs[in->a] > (int64_t)tm->regs[in->b]; break;
 		case CELL_EXEC_OP_CMPGE: tm->regs[in->dst] = (int64_t)tm->regs[in->a] >= (int64_t)tm->regs[in->b]; break;
+		case CELL_EXEC_OP_OR: tm->regs[in->dst] = tm->regs[in->a] | tm->regs[in->b]; break;
 		case CELL_EXEC_OP_JZ: if (tm->regs[in->a] == 0u) next_pc = (uint32_t)((int64_t)r->pc + 1 + in->imm); break;
 		case CELL_EXEC_OP_JNZ: if (tm->regs[in->a] != 0u) next_pc = (uint32_t)((int64_t)r->pc + 1 + in->imm); break;
 		case CELL_EXEC_OP_JMP: next_pc = (uint32_t)((int64_t)r->pc + 1 + in->imm); break;
@@ -326,7 +587,7 @@ static int run_impl(cell_task_manager_t *tm, cell_vfs_t *vfs,
 			break;
 		}
 		case CELL_EXEC_OP_PUTSM:
-			if (!output_memory_string(&b, &exec, tm->memory, tm->regs[in->a], 1)) fault(r, CELL_TASK_FAULT_OUTPUT);
+			if (!output_pointer_string(&b, &exec, tm->memory, tm->regs[in->a], 1)) fault(r, CELL_TASK_FAULT_OUTPUT);
 			break;
 		case CELL_EXEC_OP_PUTC: {
 			uint8_t ch = (uint8_t)tm->regs[in->a];
@@ -341,9 +602,10 @@ static int run_impl(cell_task_manager_t *tm, cell_vfs_t *vfs,
 			break;
 		}
 		case CELL_EXEC_OP_LOAD8: {
-			int64_t addr = (int64_t)tm->regs[in->a] + (int64_t)in->imm;
-			if (addr < 0 || (uint64_t)addr >= exec.h->memory_bytes) fault(r, CELL_TASK_FAULT_MEMORY);
-			else tm->regs[in->dst] = tm->memory[(uint32_t)addr];
+			uint64_t addr = tm->regs[in->a] + (uint64_t)(int64_t)in->imm;
+			uint8_t *p = 0;
+			if (!pointer_span(&exec, tm->memory, addr, 1u, 0, &p)) fault(r, CELL_TASK_FAULT_MEMORY);
+			else tm->regs[in->dst] = *p;
 			break;
 		}
 		case CELL_EXEC_OP_LOAD64: {
@@ -360,7 +622,7 @@ static int run_impl(cell_task_manager_t *tm, cell_vfs_t *vfs,
 		}
 		case CELL_EXEC_OP_STRLEN: {
 			uint32_t n = 0;
-			if (!memory_cstr(&exec, tm->memory, tm->regs[in->a], &n)) fault(r, CELL_TASK_FAULT_MEMORY);
+			if (!pointer_cstr(&exec, tm->memory, tm->regs[in->a], &n, 0)) fault(r, CELL_TASK_FAULT_MEMORY);
 			else tm->regs[in->dst] = n;
 			break;
 		}
@@ -374,6 +636,37 @@ static int run_impl(cell_task_manager_t *tm, cell_vfs_t *vfs,
 			int64_t value = 0;
 			if (!strcmp_memory_data(&exec, tm->memory, tm->regs[in->a], (uint32_t)in->imm, &value)) fault(r, CELL_TASK_FAULT_MEMORY);
 			else tm->regs[in->dst] = (uint64_t)value;
+			break;
+		}
+		case CELL_EXEC_OP_SYSCALL: {
+			uint8_t nr = CELL_EXEC_SYSCALL_NR(in->imm);
+			uint8_t arg2 = CELL_EXEC_SYSCALL_ARG2(in->imm);
+			int64_t result = execute_syscall(tm, vfs, env, &exec, &b, nr,
+				tm->regs[in->a], tm->regs[in->b], tm->regs[arg2]);
+			tm->regs[in->dst] = (uint64_t)result;
+			break;
+		}
+		case CELL_EXEC_OP_CALL: {
+			if (tm->call_depth >= CELL_TASK_CALL_DEPTH) { fault(r, CELL_TASK_FAULT_STACK); break; }
+			uint8_t argc_call = CELL_EXEC_CALL_ARGC(in->imm);
+			uint64_t arg0 = argc_call >= 1u ? tm->regs[in->a] : 0u;
+			uint64_t arg1 = argc_call >= 2u ? tm->regs[in->b] : 0u;
+			cell_task_call_frame_t *frame = &tm->calls[tm->call_depth++];
+			frame->return_pc = next_pc; frame->dst = in->dst;
+			for (uint32_t i = 0; i < CELL_EXEC_REGS; ++i) frame->regs[i] = tm->regs[i];
+			zero_bytes(tm->regs, sizeof(tm->regs));
+			if (argc_call >= 1u) tm->regs[0] = arg0;
+			if (argc_call >= 2u) tm->regs[1] = arg1;
+			next_pc = CELL_EXEC_CALL_TARGET(in->imm);
+			break;
+		}
+		case CELL_EXEC_OP_RET: {
+			if (!tm->call_depth) { fault(r, CELL_TASK_FAULT_STACK); break; }
+			uint64_t result = tm->regs[in->a];
+			cell_task_call_frame_t *frame = &tm->calls[--tm->call_depth];
+			for (uint32_t i = 0; i < CELL_EXEC_REGS; ++i) tm->regs[i] = frame->regs[i];
+			tm->regs[frame->dst] = result;
+			next_pc = frame->return_pc;
 			break;
 		}
 		default: fault(r, CELL_TASK_FAULT_INSTRUCTION); break;

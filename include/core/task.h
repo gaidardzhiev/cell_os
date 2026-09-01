@@ -11,6 +11,9 @@
 #define CELL_TASK_PATH_MAX 128u
 #define CELL_TASK_OUTPUT_MAX 768u
 #define CELL_TASK_ARGC_MAX 16u
+#define CELL_TASK_FD_MAX 8u
+#define CELL_TASK_HEAP_BLOCKS 8u
+#define CELL_TASK_CALL_DEPTH 8u
 
 struct cell_vfs;
 typedef struct cell_vfs cell_vfs_t;
@@ -36,8 +39,30 @@ typedef enum {
 	CELL_TASK_FAULT_OUTPUT,
 	CELL_TASK_FAULT_ARGUMENT,
 	CELL_TASK_FAULT_ARITHMETIC,
+	CELL_TASK_FAULT_STACK,
 	CELL_TASK_FAULT_INSTRUCTION
 } cell_task_fault_t;
+
+typedef struct {
+	uint8_t used;
+	uint8_t readable;
+	uint8_t writable;
+	uint8_t append;
+	uint32_t offset;
+	char path[CELL_TASK_PATH_MAX];
+} cell_task_fd_t;
+
+typedef struct {
+	uint32_t offset;
+	uint32_t size;
+	uint8_t used;
+} cell_task_heap_block_t;
+
+typedef struct {
+	uint32_t return_pc;
+	uint8_t dst;
+	uint64_t regs[CELL_EXEC_REGS];
+} cell_task_call_frame_t;
 
 typedef struct {
 	uint32_t id;
@@ -59,6 +84,12 @@ typedef struct cell_task_manager {
 	uint64_t regs[CELL_EXEC_REGS];
 	uint8_t memory[CELL_EXEC_MEMORY_MAX];
 	uint8_t image[CELL_EXEC_FILE_MAX];
+	cell_task_fd_t fds[CELL_TASK_FD_MAX];
+	cell_task_heap_block_t heap[CELL_TASK_HEAP_BLOCKS];
+	cell_task_call_frame_t calls[CELL_TASK_CALL_DEPTH];
+	uint32_t heap_next;
+	uint32_t call_depth;
+	int32_t errno_value;
 } cell_task_manager_t;
 
 void cell_task_manager_init(cell_task_manager_t *tm, uint64_t policy_mask);

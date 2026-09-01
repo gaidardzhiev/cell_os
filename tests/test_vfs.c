@@ -74,12 +74,33 @@ int main(void) {
 	ok &= expect(cell_vfs_cat(vfs, &env, "notes/hello.txt", out, sizeof(out)) == CELL_VFS_OK,
 		"cat persistent file", out);
 	ok &= expect(strcmp(out, "Cell OS remembers this.") == 0, "persistent file exact", out);
+	{
+		char absolute[CELL_VFS_PATH_MAX]; size_t size = 0, got = 0; char range[16] = {0};
+		ok &= expect(cell_vfs_open_file(vfs, &env, "notes/hello.txt", CELL_VFS_OPEN_READ | CELL_VFS_OPEN_WRITE,
+			absolute, &size) == CELL_VFS_OK && strcmp(absolute, "/home/notes/hello.txt") == 0 && size == 23u,
+			"open persistent file for range I/O", absolute);
+		ok &= expect(cell_vfs_read_at(vfs, &env, absolute, 5u, range, 2u, &got) == CELL_VFS_OK &&
+			got == 2u && memcmp(range, "OS", 2u) == 0, "persistent range read", 0);
+		ok &= expect(cell_vfs_write_at(vfs, absolute, 5u, "VM", 2u, &size) == CELL_VFS_OK && size == 23u,
+			"persistent range write", 0);
+		ok &= expect(cell_vfs_cat(vfs, &env, absolute, out, sizeof(out)) == CELL_VFS_OK &&
+			strcmp(out, "Cell VM remembers this.") == 0, "range write visible", out);
+	}
 	ok &= expect(cell_vfs_list(vfs, &env, "notes", out, sizeof(out)) == CELL_VFS_OK,
 		"list notes", out);
 	ok &= expect(strcmp(out, "hello.txt") == 0, "list file exact", out);
 	ok &= expect(cell_vfs_cat(vfs, &env, "/devices/cpu", out, sizeof(out)) == CELL_VFS_OK,
 		"read live CPU node", out);
 	ok &= expect(strncmp(out, "CPU: ", 5) == 0, "live CPU prefix", out);
+	{
+		char absolute[CELL_VFS_PATH_MAX]; char range[8] = {0}; size_t size = 0, got = 0;
+		ok &= expect(cell_vfs_open_file(vfs, &env, "/devices/cpu", CELL_VFS_OPEN_READ, absolute, &size) == CELL_VFS_OK && size >= 5u,
+			"open live node through file interface", absolute);
+		ok &= expect(cell_vfs_read_at(vfs, &env, absolute, 0u, range, 5u, &got) == CELL_VFS_OK &&
+			got == 5u && memcmp(range, "CPU: ", 5u) == 0, "range read live node", 0);
+		ok &= expect(cell_vfs_open_file(vfs, &env, "/devices/cpu", CELL_VFS_OPEN_WRITE, absolute, &size) == CELL_VFS_READ_ONLY,
+			"live node open-for-write rejected", 0);
+	}
 	ok &= expect(cell_vfs_cat(vfs, &env, "/models/cortex", out, sizeof(out)) == CELL_VFS_OK,
 		"read live model node", out);
 	ok &= expect(strstr(out, "1054400 bytes") != 0, "model bytes live", out);
@@ -105,5 +126,6 @@ int main(void) {
 	puts("#VFS live capability nodes PASS");
 	puts("#VFS read-only virtual boundary PASS");
 	puts("#VFS binary/text boundary PASS");
+	puts("#VFS descriptor range I/O primitives PASS");
 	return 0;
 }

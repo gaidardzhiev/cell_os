@@ -6,12 +6,15 @@
 #include "core/cc.h"
 #include "core/capability.h"
 #include "core/cellexec.h"
+#include "core/syscall.h"
 
 #define CC_IDENT_MAX 63u
 #define CC_STRING_MAX 512u
 #define CC_VARS 8u
 #define CC_TEMP_FIRST 8u
 #define CC_TEMP_LAST 15u
+#define CC_FUNCS 8u
+#define CC_CALL_PATCHES 32u
 
 typedef enum {
 	TOK_EOF = 0,
@@ -61,6 +64,19 @@ typedef struct {
 } value_t;
 
 typedef struct {
+	char name[CC_IDENT_MAX + 1u];
+	uint32_t entry_pc;
+	uint8_t param_count;
+	value_type_t param_types[2];
+	uint8_t defined;
+} function_t;
+
+typedef struct {
+	uint32_t pc;
+	uint8_t func_index;
+} call_patch_t;
+
+typedef struct {
 	lexer_t lex;
 	token_t tok;
 	cell_exec_insn_t code[CELL_CC_MAX_CODE];
@@ -71,6 +87,13 @@ typedef struct {
 	uint32_t var_count;
 	uint8_t temp_next;
 	uint64_t capability_mask;
+	function_t funcs[CC_FUNCS];
+	uint32_t func_count;
+	call_patch_t call_patches[CC_CALL_PATCHES];
+	uint32_t call_patch_count;
+	uint32_t entry_pc;
+	uint8_t main_seen;
+	uint8_t current_main;
 	cell_cc_diag_t *diag;
 	int failed;
 } compiler_t;
@@ -253,7 +276,7 @@ static int lex_next(lexer_t *l, token_t *t) {
 	if (c == '<' && lx_peek2(l) == '=') { (void)lx_get(l); (void)lx_get(l); t->kind = TOK_LE; return 1; }
 	if (c == '>' && lx_peek2(l) == '=') { (void)lx_get(l); (void)lx_get(l); t->kind = TOK_GE; return 1; }
 	if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '=' || c == ';' || c == ',' ||
-	    c == '(' || c == ')' || c == '{' || c == '}' || c == '[' || c == ']' || c == '<' || c == '>' || c == '!') {
+	    c == '(' || c == ')' || c == '{' || c == '}' || c == '[' || c == ']' || c == '<' || c == '>' || c == '!' || c == '|') {
 		t->kind = (unsigned char)lx_get(l); return 1;
 	}
 	diag_set(l->diag, CELL_CC_LEX_ERROR, t->line, t->column, "unsupported character"); return 0;
@@ -313,6 +336,37 @@ static int add_var(compiler_t *c, const char *name, value_type_t type, uint8_t *
 	return 1;
 }
 
+static int find_func(const compiler_t *c, const char *name, uint8_t *index) {
+	for (uint32_t i = 0; i < c->func_count; ++i) {
+		if (s_eq(c->funcs[i].name, name)) { if (index) *index = (uint8_t)i; return 1; }
+	}
+	return 0;
+}
+
+static int add_func_placeholder(compiler_t *c, const char *name, uint8_t argc,
+	const value_type_t types[2], uint8_t *index) {
+	uint8_t existing = 0;
+	if (find_func(c, name, &existing)) { if (index) *index = existing; return 1; }
+	if (c->func_count >= CC_FUNCS) return fail_at(c, CELL_CC_TOO_COMPLEX, "too many user-defined functions");
+	function_t *f = &c->funcs[c->func_count];
+	zero_bytes(f, sizeof(*f)); s_copy(f->name, sizeof(f->name), name); f->param_count = argc;
+	for (uint8_t i = 0; i < argc; ++i) f->param_types[i] = types[i];
+	if (index) *index = (uint8_t)c->func_count;
+	++c->func_count; return 1;
+}
+
+static int patch_function_calls(compiler_t *c, uint8_t index) {
+	function_t *f = &c->funcs[index];
+	for (uint32_t i = 0; i < c->call_patch_count; ++i) {
+		call_patch_t *p = &c->call_patches[i];
+		if (p->func_index != index) continue;
+		if (p->pc >= c->code_count) return fail_at(c, CELL_CC_TOO_COMPLEX, "invalid function call patch");
+		uint8_t argc = CELL_EXEC_CALL_ARGC(c->code[p->pc].imm);
+		c->code[p->pc].imm = CELL_EXEC_CALL_PACK(f->entry_pc, argc);
+	}
+	return 1;
+}
+
 static int add_data(compiler_t *c, const char *s, uint32_t n, int suffix,
 	uint32_t *offset, uint32_t *length) {
 	uint32_t extra = suffix >= 0 ? 1u : 0u;
@@ -337,10 +391,74 @@ static cell_capability_id_t cap_from_name(const char *name) {
 	return CELL_CAP_INVALID;
 }
 
+static int named_constant(const char *name, int32_t *value) {
+	static const struct { const char *name; int32_t value; } table[] = {
+		{"STDIN_FILENO", CELL_STDIN_FILENO}, {"STDOUT_FILENO", CELL_STDOUT_FILENO}, {"STDERR_FILENO", CELL_STDERR_FILENO},
+		{"O_RDONLY", CELL_O_RDONLY}, {"O_WRONLY", CELL_O_WRONLY}, {"O_RDWR", CELL_O_RDWR},
+		{"O_CREAT", CELL_O_CREAT}, {"O_TRUNC", CELL_O_TRUNC}, {"O_APPEND", CELL_O_APPEND},
+		{"SEEK_SET", CELL_SEEK_SET}, {"SEEK_CUR", CELL_SEEK_CUR}, {"SEEK_END", CELL_SEEK_END},
+		{"EPERM", CELL_EPERM}, {"ENOENT", CELL_ENOENT}, {"EIO", CELL_EIO}, {"EBADF", CELL_EBADF},
+		{"ENOMEM", CELL_ENOMEM}, {"EACCES", CELL_EACCES}, {"EFAULT", CELL_EFAULT}, {"EEXIST", CELL_EEXIST},
+		{"ENOTDIR", CELL_ENOTDIR}, {"EISDIR", CELL_EISDIR}, {"EINVAL", CELL_EINVAL}, {"EMFILE", CELL_EMFILE},
+		{"EFBIG", CELL_EFBIG}, {"ENOSPC", CELL_ENOSPC}, {"ESPIPE", CELL_ESPIPE}, {"EROFS", CELL_EROFS},
+		{"ENOTEMPTY", CELL_ENOTEMPTY}
+	};
+	for (size_t i = 0; i < sizeof(table) / sizeof(table[0]); ++i) {
+		if (s_eq(name, table[i].name)) { if (value) *value = table[i].value; return 1; }
+	}
+	return 0;
+}
+
+static int sys_builtin_nr(const compiler_t *c) {
+	if (tok_ident(c, "open")) return CELL_EXEC_SYS_OPEN;
+	if (tok_ident(c, "close")) return CELL_EXEC_SYS_CLOSE;
+	if (tok_ident(c, "read")) return CELL_EXEC_SYS_READ;
+	if (tok_ident(c, "write")) return CELL_EXEC_SYS_WRITE;
+	if (tok_ident(c, "lseek")) return CELL_EXEC_SYS_LSEEK;
+	if (tok_ident(c, "malloc")) return CELL_EXEC_SYS_MALLOC;
+	if (tok_ident(c, "free")) return CELL_EXEC_SYS_FREE;
+	return 0;
+}
+
 static int parse_expr(compiler_t *c, value_t *out);
 
 static int require_pointer(compiler_t *c, value_type_t t, const char *msg) {
 	if (t != VT_CHAR_PTR) return fail_at(c, CELL_CC_PARSE_ERROR, msg);
+	return 1;
+}
+
+static int parse_sys_builtin_expr(compiler_t *c, value_t *out) {
+	int nr = sys_builtin_nr(c);
+	if (!nr) return 0;
+	if (!next(c) || !expect(c, '(', "expected '(' after system function")) return 0;
+	value_t a = {0, VT_INT}, b = {0, VT_INT}, d = {0, VT_INT};
+	unsigned argc = nr == CELL_EXEC_SYS_CLOSE || nr == CELL_EXEC_SYS_MALLOC || nr == CELL_EXEC_SYS_FREE ? 1u :
+		nr == CELL_EXEC_SYS_OPEN ? 2u : 3u;
+	if (!parse_expr(c, &a)) return 0;
+	if (argc >= 2u && (!expect(c, ',', "expected ',' in system function") || !parse_expr(c, &b))) return 0;
+	if (argc >= 3u && (!expect(c, ',', "expected second ',' in system function") || !parse_expr(c, &d))) return 0;
+	if (!expect(c, ')', "expected ')' after system function")) return 0;
+
+	if (nr == CELL_EXEC_SYS_OPEN && (a.type != VT_CHAR_PTR || b.type != VT_INT))
+		return fail_at(c, CELL_CC_PARSE_ERROR, "open requires char pointer and integer flags");
+	if (nr == CELL_EXEC_SYS_CLOSE && a.type != VT_INT)
+		return fail_at(c, CELL_CC_PARSE_ERROR, "close requires integer file descriptor");
+	if ((nr == CELL_EXEC_SYS_READ || nr == CELL_EXEC_SYS_WRITE) &&
+	    (a.type != VT_INT || b.type != VT_CHAR_PTR || d.type != VT_INT))
+		return fail_at(c, CELL_CC_PARSE_ERROR, "read/write require fd, char pointer, and integer count");
+	if (nr == CELL_EXEC_SYS_LSEEK && (a.type != VT_INT || b.type != VT_INT || d.type != VT_INT))
+		return fail_at(c, CELL_CC_PARSE_ERROR, "lseek requires integer fd, offset, and whence");
+	if (nr == CELL_EXEC_SYS_MALLOC && a.type != VT_INT)
+		return fail_at(c, CELL_CC_PARSE_ERROR, "malloc requires integer byte count");
+	if (nr == CELL_EXEC_SYS_FREE && a.type != VT_CHAR_PTR)
+		return fail_at(c, CELL_CC_PARSE_ERROR, "free requires char pointer");
+
+	if (!emit(c, CELL_EXEC_OP_SYSCALL, a.reg, a.reg, argc >= 2u ? b.reg : 0u,
+		argc >= 3u ? CELL_EXEC_SYSCALL_PACK(nr, d.reg) : CELL_EXEC_SYSCALL_PACK(nr, 0u))) return 0;
+	if (argc >= 3u) free_temp(c, d.reg);
+	if (argc >= 2u) free_temp(c, b.reg);
+	out->reg = a.reg;
+	out->type = nr == CELL_EXEC_SYS_MALLOC ? VT_CHAR_PTR : VT_INT;
 	return 1;
 }
 
@@ -363,7 +481,53 @@ static int parse_builtin_expr(compiler_t *c, value_t *out) {
 	a.type = VT_INT; *out = a; return 1;
 }
 
+static int parse_user_call_after_name(compiler_t *c, const char *name, value_t *out) {
+	if (!expect(c, '(', "expected '(' after function name")) return 0;
+	value_t args[2]; value_type_t types[2]; uint8_t argc = 0;
+	if (c->tok.kind != ')') {
+		for (;;) {
+			if (argc >= 2u) return fail_at(c, CELL_CC_PARSE_ERROR, "bootstrap user functions accept at most two arguments");
+			if (!parse_expr(c, &args[argc])) return 0;
+			types[argc] = args[argc].type; ++argc;
+			if (c->tok.kind != ',') break;
+			if (!next(c)) return 0;
+		}
+	}
+	if (!expect(c, ')', "expected ')' after function arguments")) return 0;
+	uint8_t fi = 0;
+	if (!find_func(c, name, &fi)) {
+		if (!add_func_placeholder(c, name, argc, types, &fi)) return 0;
+	} else {
+		function_t *f = &c->funcs[fi];
+		if (f->param_count != argc) return fail_at(c, CELL_CC_PARSE_ERROR, "function argument count mismatch");
+		for (uint8_t i = 0; i < argc; ++i)
+			if (f->param_types[i] != types[i]) return fail_at(c, CELL_CC_PARSE_ERROR, "function argument type mismatch");
+	}
+	uint8_t dst = 0;
+	if (argc) dst = args[0].reg;
+	else if (!alloc_temp(c, &dst)) return 0;
+	function_t *f = &c->funcs[fi];
+	uint32_t pc = c->code_count;
+	uint32_t target = f->defined ? f->entry_pc : 0u;
+	if (!emit(c, CELL_EXEC_OP_CALL, dst, argc >= 1u ? args[0].reg : 0u, argc >= 2u ? args[1].reg : 0u,
+		CELL_EXEC_CALL_PACK(target, argc))) return 0;
+	if (!f->defined) {
+		if (c->call_patch_count >= CC_CALL_PATCHES) return fail_at(c, CELL_CC_TOO_COMPLEX, "too many unresolved function calls");
+		c->call_patches[c->call_patch_count].pc = pc;
+		c->call_patches[c->call_patch_count].func_index = fi;
+		++c->call_patch_count;
+	}
+	if (argc >= 2u) free_temp(c, args[1].reg);
+	out->reg = dst; out->type = VT_INT; return 1;
+}
+
 static int parse_primary(compiler_t *c, value_t *out) {
+	if (c->tok.kind == TOK_STRING) {
+		uint32_t off = 0; uint8_t r;
+		if (!add_data(c, c->tok.text, c->tok.text_len, 0, &off, 0) || !next(c) || !alloc_temp(c, &r) ||
+		    !emit(c, CELL_EXEC_OP_MOVI, r, 0, 0, (int32_t)(CELL_EXEC_DATA_BASE + off))) return 0;
+		out->reg = r; out->type = VT_CHAR_PTR; return 1;
+	}
 	if (c->tok.kind == TOK_NUMBER) {
 		int32_t value = c->tok.number; uint8_t r;
 		if (!alloc_temp(c, &r) || !next(c) || !emit(c, CELL_EXEC_OP_MOVI, r, 0, 0, value)) return 0;
@@ -371,10 +535,26 @@ static int parse_primary(compiler_t *c, value_t *out) {
 	}
 	if (c->tok.kind == TOK_IDENT && (tok_ident(c, "strlen") || tok_ident(c, "atoi") || tok_ident(c, "strcmp")))
 		return parse_builtin_expr(c, out);
+	if (c->tok.kind == TOK_IDENT && sys_builtin_nr(c)) return parse_sys_builtin_expr(c, out);
+	if (tok_ident(c, "errno")) {
+		uint8_t r;
+		if (!next(c) || !alloc_temp(c, &r) || !emit(c, CELL_EXEC_OP_SYSCALL, r, 0, 0, CELL_EXEC_SYSCALL_PACK(CELL_EXEC_SYS_ERRNO, 0))) return 0;
+		out->reg = r; out->type = VT_INT; return 1;
+	}
 	if (c->tok.kind == TOK_IDENT) {
+		int32_t constant = 0;
+		if (named_constant(c->tok.text, &constant)) {
+			uint8_t r;
+			if (!next(c) || !alloc_temp(c, &r) || !emit(c, CELL_EXEC_OP_MOVI, r, 0, 0, constant)) return 0;
+			out->reg = r; out->type = VT_INT; return 1;
+		}
 		char name[CC_IDENT_MAX + 1u]; s_copy(name, sizeof(name), c->tok.text);
 		uint8_t vr, tr; value_type_t type;
-		if (!find_var(c, name, &vr, &type)) return fail_at(c, CELL_CC_PARSE_ERROR, "unknown local variable");
+		if (!find_var(c, name, &vr, &type)) {
+			if (!next(c)) return 0;
+			if (c->tok.kind != '(') return fail_at(c, CELL_CC_PARSE_ERROR, "unknown local variable or function");
+			return parse_user_call_after_name(c, name, out);
+		}
 		if (!next(c) || !alloc_temp(c, &tr) || !emit(c, CELL_EXEC_OP_MOV, tr, vr, 0, 0)) return 0;
 		out->reg = tr; out->type = type;
 		while (c->tok.kind == '[') {
@@ -496,7 +676,19 @@ static int parse_compare(compiler_t *c, value_t *out) {
 	return 1;
 }
 
-static int parse_expr(compiler_t *c, value_t *out) { return parse_compare(c, out); }
+static int parse_bitor(compiler_t *c, value_t *out) {
+	if (!parse_compare(c, out)) return 0;
+	while (c->tok.kind == '|') {
+		value_t right;
+		if (out->type != VT_INT || !next(c) || !parse_compare(c, &right) || right.type != VT_INT)
+			return fail_at(c, CELL_CC_PARSE_ERROR, "bitwise '|' requires integers");
+		if (!emit(c, CELL_EXEC_OP_OR, out->reg, out->reg, right.reg, 0)) return 0;
+		free_temp(c, right.reg);
+	}
+	return 1;
+}
+
+static int parse_expr(compiler_t *c, value_t *out) { return parse_bitor(c, out); }
 
 static int parse_false_branch(compiler_t *c, uint32_t *branch_pc) {
 	value_t v;
@@ -599,22 +791,52 @@ static int parse_return(compiler_t *c) {
 	value_t v;
 	if (!parse_expr(c, &v) || v.type != VT_INT || !expect(c, ';', "expected ';' after return"))
 		return fail_at(c, CELL_CC_PARSE_ERROR, "return requires integer expression");
-	int ok = emit(c, CELL_EXEC_OP_EXIT, 0, v.reg, 0, 0); free_temp(c, v.reg); return ok;
+	int ok = emit(c, c->current_main ? CELL_EXEC_OP_EXIT : CELL_EXEC_OP_RET, 0, v.reg, 0, 0); free_temp(c, v.reg); return ok;
 }
 
 static int parse_assignment(compiler_t *c) {
 	char name[CC_IDENT_MAX + 1u]; s_copy(name, sizeof(name), c->tok.text);
 	uint8_t vr; value_type_t type;
 	if (!find_var(c, name, &vr, &type)) return fail_at(c, CELL_CC_PARSE_ERROR, "assignment to unknown local variable");
-	if (!next(c) || !expect(c, '=', "expected '=' in assignment")) return 0;
+	if (!next(c)) return 0;
+	if (c->tok.kind == '[') {
+		if (type != VT_CHAR_PTR) return fail_at(c, CELL_CC_PARSE_ERROR, "indexed assignment currently requires char pointer");
+		uint8_t addr;
+		if (!alloc_temp(c, &addr) || !emit(c, CELL_EXEC_OP_MOV, addr, vr, 0, 0) || !next(c)) return 0;
+		value_t index;
+		if (!parse_expr(c, &index) || index.type != VT_INT || !expect(c, ']', "expected ']' after index")) return 0;
+		if (!emit(c, CELL_EXEC_OP_ADD, addr, addr, index.reg, 0)) return 0;
+		free_temp(c, index.reg);
+		if (!expect(c, '=', "expected '=' in indexed assignment")) return 0;
+		value_t v;
+		if (!parse_expr(c, &v) || v.type != VT_INT || !expect(c, ';', "expected ';' after indexed assignment"))
+			return fail_at(c, CELL_CC_PARSE_ERROR, "char pointer assignment requires integer byte value");
+		if (!emit(c, CELL_EXEC_OP_STORE8, 0, addr, v.reg, 0)) return 0;
+		free_temp(c, v.reg); free_temp(c, addr); return 1;
+	}
+	if (!expect(c, '=', "expected '=' in assignment")) return 0;
 	value_t v;
 	if (!parse_expr(c, &v) || !compatible(type, v.type)) return fail_at(c, CELL_CC_PARSE_ERROR, "assignment type mismatch");
 	if (!expect(c, ';', "expected ';' after assignment") || !emit(c, CELL_EXEC_OP_MOV, vr, v.reg, 0, 0)) return 0;
 	free_temp(c, v.reg); return 1;
 }
 
+static int parse_pointer_store(compiler_t *c) {
+	if (!expect(c, '*', "expected '*'") || c->tok.kind != TOK_IDENT)
+		return fail_at(c, CELL_CC_PARSE_ERROR, "pointer store requires local char pointer");
+	uint8_t vr; value_type_t type;
+	if (!find_var(c, c->tok.text, &vr, &type) || type != VT_CHAR_PTR)
+		return fail_at(c, CELL_CC_PARSE_ERROR, "pointer store requires local char pointer");
+	if (!next(c) || !expect(c, '=', "expected '=' in pointer store")) return 0;
+	value_t v;
+	if (!parse_expr(c, &v) || v.type != VT_INT || !expect(c, ';', "expected ';' after pointer store"))
+		return fail_at(c, CELL_CC_PARSE_ERROR, "pointer store requires integer byte value");
+	int ok = emit(c, CELL_EXEC_OP_STORE8, 0, vr, v.reg, 0); free_temp(c, v.reg); return ok;
+}
+
 static int parse_statement(compiler_t *c) {
 	if (c->tok.kind == ';') return next(c);
+	if (c->tok.kind == '*') return parse_pointer_store(c);
 	if (c->tok.kind == '{') return parse_block(c);
 	if (tok_ident(c, "int") || tok_ident(c, "char")) return parse_declaration(c);
 	if (tok_ident(c, "puts")) return parse_puts(c);
@@ -623,30 +845,84 @@ static int parse_statement(compiler_t *c) {
 	if (tok_ident(c, "if")) return parse_if(c);
 	if (tok_ident(c, "while")) return parse_while(c);
 	if (tok_ident(c, "return")) return parse_return(c);
-	if (c->tok.kind == TOK_IDENT) return parse_assignment(c);
+	if (c->tok.kind == TOK_IDENT && sys_builtin_nr(c)) {
+		value_t v;
+		if (!parse_sys_builtin_expr(c, &v) || !expect(c, ';', "expected ';' after system function")) return 0;
+		free_temp(c, v.reg); return 1;
+	}
+	if (c->tok.kind == TOK_IDENT) {
+		uint8_t vr;
+		if (find_var(c, c->tok.text, &vr, 0)) return parse_assignment(c);
+		value_t v;
+		if (!parse_expr(c, &v) || !expect(c, ';', "expected ';' after function call")) return 0;
+		free_temp(c, v.reg); return 1;
+	}
 	return fail_at(c, CELL_CC_PARSE_ERROR, "unsupported statement in bootstrap C subset");
 }
 
-static int parse_main_parameters(compiler_t *c) {
+static int parse_function_parameters(compiler_t *c, uint8_t *count,
+	value_type_t types[2], char names[2][CC_IDENT_MAX + 1u]) {
+	*count = 0u;
 	if (tok_ident(c, "void")) return next(c);
 	if (c->tok.kind == ')') return 1;
-	if (!tok_ident(c, "int")) return fail_at(c, CELL_CC_PARSE_ERROR, "expected void or int argc parameter");
-	if (!next(c) || c->tok.kind != TOK_IDENT) return fail_at(c, CELL_CC_PARSE_ERROR, "expected argc parameter name");
-	char argc_name[CC_IDENT_MAX + 1u]; s_copy(argc_name, sizeof(argc_name), c->tok.text);
-	if (!next(c) || !expect(c, ',', "expected ',' between main parameters") || !tok_ident(c, "char") || !next(c) ||
-	    !expect(c, '*', "expected first '*' in char **argv") || !expect(c, '*', "expected second '*' in char **argv") ||
-	    c->tok.kind != TOK_IDENT) return fail_at(c, CELL_CC_PARSE_ERROR, "expected char **argv parameter");
-	char argv_name[CC_IDENT_MAX + 1u]; s_copy(argv_name, sizeof(argv_name), c->tok.text);
-	if (!next(c) || !add_var(c, argc_name, VT_INT, 0) || !add_var(c, argv_name, VT_CHAR_PP, 0)) return 0;
+	for (;;) {
+		if (*count >= 2u) return fail_at(c, CELL_CC_PARSE_ERROR, "bootstrap user functions accept at most two parameters");
+		value_type_t type;
+		if (!parse_type(c, &type) || c->tok.kind != TOK_IDENT) return fail_at(c, CELL_CC_PARSE_ERROR, "expected function parameter name");
+		types[*count] = type; s_copy(names[*count], CC_IDENT_MAX + 1u, c->tok.text); ++*count;
+		if (!next(c)) return 0;
+		if (c->tok.kind != ',') break;
+		if (!next(c)) return 0;
+	}
+	return 1;
+}
+
+static int define_function(compiler_t *c) {
+	if (!expect_ident(c, "int", "bootstrap functions must return int")) return 0;
+	if (c->tok.kind != TOK_IDENT) return fail_at(c, CELL_CC_PARSE_ERROR, "expected function name");
+	char name[CC_IDENT_MAX + 1u]; s_copy(name, sizeof(name), c->tok.text);
+	if (!next(c) || !expect(c, '(', "expected '(' after function name")) return 0;
+	uint8_t argc = 0; value_type_t types[2]; char names[2][CC_IDENT_MAX + 1u];
+	if (!parse_function_parameters(c, &argc, types, names) || !expect(c, ')', "expected ')' after function parameters")) return 0;
+
+	uint8_t fi = 0;
+	if (find_func(c, name, &fi)) {
+		function_t *f = &c->funcs[fi];
+		if (f->defined) return fail_at(c, CELL_CC_PARSE_ERROR, "duplicate function definition");
+		if (f->param_count != argc) return fail_at(c, CELL_CC_PARSE_ERROR, "function definition argument count mismatch");
+		for (uint8_t i = 0; i < argc; ++i)
+			if (f->param_types[i] != types[i]) return fail_at(c, CELL_CC_PARSE_ERROR, "function definition argument type mismatch");
+	} else if (!add_func_placeholder(c, name, argc, types, &fi)) return 0;
+	function_t *f = &c->funcs[fi];
+	f->defined = 1u; f->entry_pc = c->code_count;
+	if (!patch_function_calls(c, fi)) return 0;
+
+	int is_main = s_eq(name, "main");
+	if (is_main) {
+		if (c->main_seen) return fail_at(c, CELL_CC_PARSE_ERROR, "duplicate main definition");
+		if (!(argc == 0u || (argc == 2u && types[0] == VT_INT && types[1] == VT_CHAR_PP)))
+			return fail_at(c, CELL_CC_PARSE_ERROR, "main must use void or int argc, char **argv");
+		c->main_seen = 1u; c->entry_pc = f->entry_pc;
+	}
+	c->current_main = (uint8_t)is_main;
+	c->var_count = 0u; c->temp_next = CC_TEMP_FIRST;
+	for (uint8_t i = 0; i < argc; ++i) if (!add_var(c, names[i], types[i], 0)) return 0;
+	if (!parse_block(c)) return 0;
+	if (is_main) {
+		if (!emit(c, CELL_EXEC_OP_HALT, 0, 0, 0, 0)) return 0;
+	} else {
+		if (!emit(c, CELL_EXEC_OP_MOVI, CC_TEMP_LAST, 0, 0, 0) || !emit(c, CELL_EXEC_OP_RET, 0, CC_TEMP_LAST, 0, 0)) return 0;
+	}
+	c->current_main = 0u; c->var_count = 0u; c->temp_next = CC_TEMP_FIRST;
 	return 1;
 }
 
 static int parse_translation_unit(compiler_t *c) {
-	if (!expect_ident(c, "int", "expected int main") || !expect_ident(c, "main", "expected main") ||
-	    !expect(c, '(', "expected '(' after main") || !parse_main_parameters(c) ||
-	    !expect(c, ')', "expected ')' after main parameters") || !parse_block(c)) return 0;
-	if (c->tok.kind != TOK_EOF) return fail_at(c, CELL_CC_PARSE_ERROR, "user-defined functions are not supported yet");
-	return emit(c, CELL_EXEC_OP_HALT, 0, 0, 0, 0);
+	while (c->tok.kind != TOK_EOF) if (!define_function(c)) return 0;
+	if (!c->main_seen) return fail_at(c, CELL_CC_PARSE_ERROR, "translation unit requires main");
+	for (uint32_t i = 0; i < c->func_count; ++i)
+		if (!c->funcs[i].defined) return fail_at(c, CELL_CC_PARSE_ERROR, "called function is not defined");
+	return 1;
 }
 
 int cell_cc_compile(const char *source, size_t source_bytes,
@@ -671,7 +947,7 @@ int cell_cc_compile(const char *source, size_t source_bytes,
 	cell_exec_header_t *h = (cell_exec_header_t *)dst;
 	h->magic = CELL_EXEC_MAGIC; h->version = CELL_EXEC_VERSION; h->header_bytes = CELL_EXEC_HEADER_BYTES;
 	h->instruction_bytes = CELL_EXEC_INSN_BYTES; h->code_bytes = (uint32_t)code_bytes; h->data_bytes = c->data_bytes;
-	h->entry_pc = 0; h->capability_mask = c->capability_mask; h->memory_bytes = CELL_CC_TASK_MEMORY;
+	h->entry_pc = c->entry_pc; h->capability_mask = c->capability_mask; h->memory_bytes = CELL_CC_TASK_MEMORY;
 	uint64_t gas = (uint64_t)c->code_count * 128u + 1024u; if (gas > CELL_EXEC_GAS_MAX) gas = CELL_EXEC_GAS_MAX;
 	h->gas_limit = (uint32_t)gas; h->flags = CELL_EXEC_F_NONE; h->total_bytes = (uint32_t)total;
 	for (uint32_t i = 0; i < c->code_count; ++i) ((cell_exec_insn_t *)(dst + CELL_EXEC_HEADER_BYTES))[i] = c->code[i];

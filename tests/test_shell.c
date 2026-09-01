@@ -127,6 +127,19 @@ int main(void) {
 		ok &= expect(k == CELL_SHELL_PROCESS && strstr(out, want) != 0, "argv program exit status", out);
 	}
 
+	k = cell_shell_execute("echo '#include <fcntl.h>' > /home/sysio.c", &env, out, sizeof(out), &pid);
+	ok &= expect(k == CELL_SHELL_VFS && out[0] == 0, "create system C source fcntl", out);
+	k = cell_shell_execute("echo '#include <unistd.h>' >> /home/sysio.c", &env, out, sizeof(out), &pid);
+	ok &= expect(k == CELL_SHELL_VFS && out[0] == 0, "create system C source unistd", out);
+	k = cell_shell_execute("echo 'int main(void) { int fd; fd = open(\"/home/from-c.txt\", O_CREAT | O_TRUNC | O_WRONLY); if (fd < 0) return 1; if (write(fd, \"native io\", 9) != 9) return 2; return close(fd); }' >> /home/sysio.c", &env, out, sizeof(out), &pid);
+	ok &= expect(k == CELL_SHELL_VFS && out[0] == 0, "create system C source body", out);
+	k = cell_shell_execute("cc /home/sysio.c -o /programs/sysio", &env, out, sizeof(out), &pid);
+	ok &= expect(k == CELL_SHELL_VFS && out[0] == 0, "cc system interface target compile", out);
+	k = cell_shell_execute("sysio", &env, out, sizeof(out), &pid);
+	ok &= expect(k == CELL_SHELL_PROCESS && out[0] == 0, "execute target-compiled system C", out);
+	k = cell_shell_execute("cat /home/from-c.txt", &env, out, sizeof(out), &pid);
+	ok &= expect(k == CELL_SHELL_VFS && strcmp(out, "native io") == 0, "target-compiled C persistent file I/O", out);
+
 	cell_vfs_t remount;
 	cell_task_manager_t tasks2;
 	cell_capability_env_t env2 = {0};
@@ -155,5 +168,6 @@ int main(void) {
 	puts("#SHELL cc compile/install/run PASS");
 	puts("#SHELL compiled-program remount persistence PASS");
 	puts("#SHELL program argv forwarding PASS");
+	puts("#SHELL target-compiled C file descriptor I/O PASS");
 	return 0;
 }

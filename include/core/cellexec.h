@@ -14,6 +14,7 @@
 #define CELL_EXEC_MEMORY_MAX 4096u
 #define CELL_EXEC_GAS_MAX 100000u
 #define CELL_EXEC_FILE_MAX (16u * 1024u)
+#define CELL_EXEC_DATA_BASE 0x40000000u
 
 #define CELL_EXEC_F_NONE 0u
 
@@ -46,8 +47,30 @@ typedef enum {
 	CELL_EXEC_OP_PUTC = 25,
 	CELL_EXEC_OP_STRLEN = 26,
 	CELL_EXEC_OP_ATOI = 27,
-	CELL_EXEC_OP_STRCMPC = 28
+	CELL_EXEC_OP_STRCMPC = 28,
+	CELL_EXEC_OP_SYSCALL = 29,
+	CELL_EXEC_OP_CALL = 30,
+	CELL_EXEC_OP_RET = 31,
+	CELL_EXEC_OP_OR = 32
 } cell_exec_opcode_t;
+
+typedef enum {
+	CELL_EXEC_SYS_OPEN = 1,
+	CELL_EXEC_SYS_CLOSE = 2,
+	CELL_EXEC_SYS_READ = 3,
+	CELL_EXEC_SYS_WRITE = 4,
+	CELL_EXEC_SYS_LSEEK = 5,
+	CELL_EXEC_SYS_ERRNO = 6,
+	CELL_EXEC_SYS_MALLOC = 7,
+	CELL_EXEC_SYS_FREE = 8
+} cell_exec_syscall_t;
+
+#define CELL_EXEC_SYSCALL_PACK(nr, arg2) ((int32_t)(((uint32_t)(nr) & 0xffu) | (((uint32_t)(arg2) & 0xffu) << 8)))
+#define CELL_EXEC_SYSCALL_NR(imm) ((uint8_t)((uint32_t)(imm) & 0xffu))
+#define CELL_EXEC_SYSCALL_ARG2(imm) ((uint8_t)(((uint32_t)(imm) >> 8) & 0xffu))
+#define CELL_EXEC_CALL_PACK(target, argc) ((int32_t)(((uint32_t)(target) & 0x00ffffffu) | (((uint32_t)(argc) & 0xffu) << 24)))
+#define CELL_EXEC_CALL_TARGET(imm) ((uint32_t)(imm) & 0x00ffffffu)
+#define CELL_EXEC_CALL_ARGC(imm) ((uint8_t)(((uint32_t)(imm) >> 24) & 0xffu))
 
 typedef enum {
 	CELL_EXEC_OK = 0,
