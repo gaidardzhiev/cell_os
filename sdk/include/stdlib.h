@@ -3,8 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef _CELL_STDIO_H
-#define _CELL_STDIO_H
-int puts(const char *s);
-int putchar(int c);
+#ifndef _CELL_STDLIB_H
+#define _CELL_STDLIB_H
+int atoi(const char *s);
 #endif

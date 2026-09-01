@@ -33,6 +33,16 @@ int main(void) {
 	ok &= expect(cell_exec_open(&e, image, bytes, ~0ull) == CELL_EXEC_OK &&
 		(e.h->capability_mask & (1ull << CELL_CAP_MEMORY_STATUS)), "capability declaration inferred", &d);
 
+	const char *argv_source =
+		"#include <stdio.h>\n#include <string.h>\n#include <stdlib.h>\n"
+		"int main(int argc, char **argv) { char *p; int n; p = argv[1]; "
+		"n = atoi(argv[2]); if (strlen(p) >= 2) n = n / 2 + n % 2; "
+		"if (strcmp(p, \"cell\") == 0) putchar('C'); return n; }\n";
+	ok &= expect(cell_cc_compile(argv_source, strlen(argv_source), image, sizeof(image), &bytes, &d),
+		"compile argc argv and libc subset", &d);
+	ok &= expect(cell_exec_open(&e, image, bytes, ~0ull) == CELL_EXEC_OK &&
+		e.h->memory_bytes == CELL_CC_TASK_MEMORY, "argv program CellExec validation", &d);
+
 	const char *bad = "int main(void) { printf(\"x\"); return 0; }";
 	ok &= expect(!cell_cc_compile(bad, strlen(bad), image, sizeof(image), &bytes, &d) &&
 		d.status == CELL_CC_PARSE_ERROR, "reject unsupported C library surface", &d);
@@ -41,5 +51,6 @@ int main(void) {
 	puts("#CC CellExec validation PASS");
 	puts("#CC capability inference PASS");
 	puts("#CC unsupported-surface rejection PASS");
+	puts("#CC argc argv pointer libc subset PASS");
 	return 0;
 }

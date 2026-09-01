@@ -43,6 +43,12 @@ static int branch_target_ok(uint32_t pc, int32_t rel, uint32_t count) {
 	return target >= 0 && target < (int64_t)count;
 }
 
+static int data_cstr_ok(const uint8_t *data, uint32_t bytes, uint32_t off) {
+	if (off >= bytes) return 0;
+	for (uint32_t i = off; i < bytes; ++i) if (data[i] == 0u) return 1;
+	return 0;
+}
+
 cell_exec_status_t cell_exec_open(cell_exec_t *exec, const void *blob, size_t bytes,
 	uint64_t known_capability_mask) {
 	if (!exec || !blob || bytes < CELL_EXEC_HEADER_BYTES) return CELL_EXEC_BAD_ARGUMENT;
@@ -67,6 +73,7 @@ cell_exec_status_t cell_exec_open(cell_exec_t *exec, const void *blob, size_t by
 	if (h->capability_mask & ~known_capability_mask) return CELL_EXEC_BAD_CAPABILITY;
 
 	const cell_exec_insn_t *code = (const cell_exec_insn_t *)((const uint8_t *)blob + CELL_EXEC_HEADER_BYTES);
+	const uint8_t *data = (const uint8_t *)blob + CELL_EXEC_HEADER_BYTES + h->code_bytes;
 	for (uint32_t pc = 0; pc < count; ++pc) {
 		const cell_exec_insn_t *in = &code[pc];
 		switch (in->opcode) {
@@ -81,6 +88,14 @@ cell_exec_status_t cell_exec_open(cell_exec_t *exec, const void *blob, size_t by
 		case CELL_EXEC_OP_ADD:
 		case CELL_EXEC_OP_SUB:
 		case CELL_EXEC_OP_MUL:
+		case CELL_EXEC_OP_DIV:
+		case CELL_EXEC_OP_MOD:
+		case CELL_EXEC_OP_CMPEQ:
+		case CELL_EXEC_OP_CMPNE:
+		case CELL_EXEC_OP_CMPLT:
+		case CELL_EXEC_OP_CMPLE:
+		case CELL_EXEC_OP_CMPGT:
+		case CELL_EXEC_OP_CMPGE:
 			if (!reg_ok(in->dst) || !reg_ok(in->a) || !reg_ok(in->b)) return CELL_EXEC_BAD_REGISTER;
 			break;
 		case CELL_EXEC_OP_ADDI:
@@ -109,10 +124,24 @@ cell_exec_status_t cell_exec_open(cell_exec_t *exec, const void *blob, size_t by
 			break;
 		}
 		case CELL_EXEC_OP_LOAD8:
+		case CELL_EXEC_OP_LOAD64:
 			if (!reg_ok(in->dst) || !reg_ok(in->a)) return CELL_EXEC_BAD_REGISTER;
 			break;
 		case CELL_EXEC_OP_STORE8:
 			if (!reg_ok(in->a) || !reg_ok(in->b)) return CELL_EXEC_BAD_REGISTER;
+			break;
+		case CELL_EXEC_OP_EXIT:
+		case CELL_EXEC_OP_PUTSM:
+		case CELL_EXEC_OP_PUTC:
+			if (!reg_ok(in->a)) return CELL_EXEC_BAD_REGISTER;
+			break;
+		case CELL_EXEC_OP_STRLEN:
+		case CELL_EXEC_OP_ATOI:
+			if (!reg_ok(in->dst) || !reg_ok(in->a)) return CELL_EXEC_BAD_REGISTER;
+			break;
+		case CELL_EXEC_OP_STRCMPC:
+			if (!reg_ok(in->dst) || !reg_ok(in->a) || in->imm < 0 ||
+			    !data_cstr_ok(data, h->data_bytes, (uint32_t)in->imm)) return CELL_EXEC_BAD_DATA;
 			break;
 		default:
 			return CELL_EXEC_BAD_OPCODE;
@@ -121,7 +150,7 @@ cell_exec_status_t cell_exec_open(cell_exec_t *exec, const void *blob, size_t by
 
 	exec->h = h;
 	exec->code = code;
-	exec->data = (const uint8_t *)blob + CELL_EXEC_HEADER_BYTES + h->code_bytes;
+	exec->data = data;
 	exec->instruction_count = count;
 	exec->blob = (const uint8_t *)blob;
 	exec->blob_bytes = bytes;

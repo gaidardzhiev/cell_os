@@ -110,6 +110,23 @@ int main(void) {
 	k = cell_shell_execute("chello", &env, out, sizeof(out), &pid);
 	ok &= expect(k == CELL_SHELL_PROCESS && strcmp(out, "compiled C\ncompiled C\n") == 0, "execute compiled C", out);
 
+	k = cell_shell_execute("echo '#include <stdio.h>' > /home/args.c", &env, out, sizeof(out), &pid);
+	ok &= expect(k == CELL_SHELL_VFS && out[0] == 0, "create argv C source include", out);
+	k = cell_shell_execute("echo '#include <stdlib.h>' >> /home/args.c", &env, out, sizeof(out), &pid);
+	ok &= expect(k == CELL_SHELL_VFS && out[0] == 0, "create argv C source stdlib", out);
+	k = cell_shell_execute("echo 'int main(int argc, char **argv) { if (argc != 3) return 2; puts(argv[1]); return atoi(argv[2]); }' >> /home/args.c", &env, out, sizeof(out), &pid);
+	ok &= expect(k == CELL_SHELL_VFS && out[0] == 0, "create argv C source body", out);
+	k = cell_shell_execute("cc /home/args.c -o /programs/cargs", &env, out, sizeof(out), &pid);
+	ok &= expect(k == CELL_SHELL_VFS && out[0] == 0, "cc argv target compile", out);
+	k = cell_shell_execute("cargs \"hello world\" 7", &env, out, sizeof(out), &pid);
+	ok &= expect(k == CELL_SHELL_PROCESS && strcmp(out, "hello world\n") == 0, "program argv execution", out);
+	{
+		char want[64];
+		(void)snprintf(want, sizeof(want), "%u exited 7", pid);
+		k = cell_shell_execute("ps", &env, out, sizeof(out), &pid);
+		ok &= expect(k == CELL_SHELL_PROCESS && strstr(out, want) != 0, "argv program exit status", out);
+	}
+
 	cell_vfs_t remount;
 	cell_task_manager_t tasks2;
 	cell_capability_env_t env2 = {0};
@@ -137,5 +154,6 @@ int main(void) {
 	puts("#SHELL legacy proof commands absent PASS");
 	puts("#SHELL cc compile/install/run PASS");
 	puts("#SHELL compiled-program remount persistence PASS");
+	puts("#SHELL program argv forwarding PASS");
 	return 0;
 }

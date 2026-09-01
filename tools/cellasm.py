@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
 # SPDX-License-Identifier: GPL-3.0-or-later
-#
 import argparse
 import ast
 import shlex
@@ -33,7 +32,10 @@ CAPS = {
 OPS = {
     "halt": 0, "movi": 1, "mov": 2, "add": 3, "addi": 4, "sub": 5,
     "mul": 6, "jz": 7, "jnz": 8, "jmp": 9, "puts": 10, "cap": 11,
-    "load8": 12, "store8": 13,
+    "load8": 12, "store8": 13, "div": 14, "mod": 15,
+    "cmpeq": 16, "cmpne": 17, "cmplt": 18, "cmple": 19,
+    "cmpgt": 20, "cmpge": 21, "exit": 22, "load64": 23,
+    "putsm": 24, "putc": 25, "strlen": 26, "atoi": 27, "strcmpc": 28,
 }
 
 def reg(s):
@@ -148,7 +150,7 @@ def assemble(text):
             elif op == "mov":
                 if len(p) != 3: raise ValueError("mov rD rA")
                 dst, a = reg(p[1]), reg(p[2])
-            elif op in ("add", "sub", "mul"):
+            elif op in ("add", "sub", "mul", "div", "mod", "cmpeq", "cmpne", "cmplt", "cmple", "cmpgt", "cmpge"):
                 if len(p) != 4: raise ValueError(f"{op} rD rA rB")
                 dst, a, b = reg(p[1]), reg(p[2]), reg(p[3])
             elif op == "addi":
@@ -174,12 +176,28 @@ def assemble(text):
                 if name not in caps: raise ValueError(f"capability {name} not declared with .cap")
                 imm = CAPS[name]
                 dst = reg(p[2]) if len(p) == 3 else 0
-            elif op == "load8":
-                if len(p) != 4: raise ValueError("load8 rD rA OFFSET")
+            elif op in ("load8", "load64"):
+                if len(p) != 4: raise ValueError(f"{op} rD rA OFFSET")
                 dst, a, imm = reg(p[1]), reg(p[2]), integer(p[3])
             elif op == "store8":
                 if len(p) != 4: raise ValueError("store8 rA rB OFFSET")
                 a, b, imm = reg(p[1]), reg(p[2]), integer(p[3])
+            elif op == "exit":
+                if len(p) != 2: raise ValueError("exit rA")
+                a = reg(p[1])
+            elif op in ("putsm", "putc"):
+                if len(p) != 2: raise ValueError(f"{op} rA")
+                a = reg(p[1])
+            elif op in ("strlen", "atoi"):
+                if len(p) != 3: raise ValueError(f"{op} rD rA")
+                dst, a = reg(p[1]), reg(p[2])
+            elif op == "strcmpc":
+                if len(p) != 4 or p[3] not in data_map:
+                    raise ValueError("strcmpc rD rA DATA_LABEL")
+                dst, a = reg(p[1]), reg(p[2])
+                imm, n = data_map[p[3]]
+                if not n or data[imm + n - 1] != 0:
+                    raise ValueError("strcmpc data must end with NUL")
         except ValueError as e:
             raise ValueError(f"line {lineno}: {e}") from e
         if not -(1 << 31) <= imm < (1 << 31):

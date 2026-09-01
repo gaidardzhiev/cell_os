@@ -2,15 +2,15 @@
  * Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
 
-#define CELL_CC_SOURCE_MAX 4096u
+#define CELL_CC_SOURCE_MAX 8192u
 #define CELL_CC_MAX_CODE 512u
 #define CELL_CC_MAX_DATA 8192u
 #define CELL_CC_DIAG_MAX 192u
+#define CELL_CC_TASK_MEMORY 2048u
 
 typedef enum {
 	CELL_CC_OK = 0,

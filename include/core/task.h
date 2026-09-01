@@ -2,7 +2,6 @@
  * Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
@@ -11,6 +10,7 @@
 #define CELL_TASK_HISTORY 8u
 #define CELL_TASK_PATH_MAX 128u
 #define CELL_TASK_OUTPUT_MAX 768u
+#define CELL_TASK_ARGC_MAX 16u
 
 struct cell_vfs;
 typedef struct cell_vfs cell_vfs_t;
@@ -34,6 +34,8 @@ typedef enum {
 	CELL_TASK_FAULT_MEMORY,
 	CELL_TASK_FAULT_CAPABILITY,
 	CELL_TASK_FAULT_OUTPUT,
+	CELL_TASK_FAULT_ARGUMENT,
+	CELL_TASK_FAULT_ARITHMETIC,
 	CELL_TASK_FAULT_INSTRUCTION
 } cell_task_fault_t;
 
@@ -65,6 +67,10 @@ const char *cell_task_fault_name(cell_task_fault_t fault);
 uint64_t cell_task_default_policy(void);
 int cell_task_run(cell_task_manager_t *tm, cell_vfs_t *vfs,
 	const cell_capability_env_t *env, const char *path,
+	char *out, size_t cap, uint32_t *task_id);
+int cell_task_run_argv(cell_task_manager_t *tm, cell_vfs_t *vfs,
+	const cell_capability_env_t *env, const char *path,
+	uint32_t argc, const char *const argv[],
 	char *out, size_t cap, uint32_t *task_id);
 int cell_task_list(const cell_task_manager_t *tm, char *out, size_t cap);
 int cell_task_describe(const cell_task_manager_t *tm, uint32_t id, char *out, size_t cap);

@@ -2,7 +2,6 @@
  * Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
@@ -32,7 +31,22 @@ typedef enum {
 	CELL_EXEC_OP_PUTS = 10,
 	CELL_EXEC_OP_CAP = 11,
 	CELL_EXEC_OP_LOAD8 = 12,
-	CELL_EXEC_OP_STORE8 = 13
+	CELL_EXEC_OP_STORE8 = 13,
+	CELL_EXEC_OP_DIV = 14,
+	CELL_EXEC_OP_MOD = 15,
+	CELL_EXEC_OP_CMPEQ = 16,
+	CELL_EXEC_OP_CMPNE = 17,
+	CELL_EXEC_OP_CMPLT = 18,
+	CELL_EXEC_OP_CMPLE = 19,
+	CELL_EXEC_OP_CMPGT = 20,
+	CELL_EXEC_OP_CMPGE = 21,
+	CELL_EXEC_OP_EXIT = 22,
+	CELL_EXEC_OP_LOAD64 = 23,
+	CELL_EXEC_OP_PUTSM = 24,
+	CELL_EXEC_OP_PUTC = 25,
+	CELL_EXEC_OP_STRLEN = 26,
+	CELL_EXEC_OP_ATOI = 27,
+	CELL_EXEC_OP_STRCMPC = 28
 } cell_exec_opcode_t;
 
 typedef enum {

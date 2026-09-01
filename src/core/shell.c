@@ -356,14 +356,10 @@ cell_shell_result_t cell_shell_execute(const char *line,
 		}
 		return CELL_SHELL_NOT_HANDLED;
 	}
-	if (w.argc != 1u) {
-		copy_text(out, cap, cmd);
-		append_text(out, cap, ": arguments are not implemented yet.");
-		return CELL_SHELL_PROCESS;
-	}
 	char program_output[CELL_TASK_OUTPUT_MAX];
 	uint32_t id = 0;
-	if (!cell_task_run(env->tasks, env->vfs, env, path, program_output, sizeof(program_output), &id)) {
+	if (!cell_task_run_argv(env->tasks, env->vfs, env, path, w.argc,
+		(const char *const *)w.argv, program_output, sizeof(program_output), &id)) {
 		copy_text(out, cap, cmd); append_text(out, cap, ": execution failed.");
 		return CELL_SHELL_PROCESS;
 	}
