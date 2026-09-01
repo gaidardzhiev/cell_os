@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
-# This file is licensed under the MIT License.
-# See the LICENSE file in the project root for full license text.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IMG="${1:-$ROOT/build/disk.img}"

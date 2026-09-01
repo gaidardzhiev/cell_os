@@ -1,5 +1,5 @@
 ; Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
-; SPDX-License-Identifier: MIT
+; SPDX-License-Identifier: GPL-3.0-or-later
 org 0x7C00
 bits 16
 start:

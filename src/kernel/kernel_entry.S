@@ -1,5 +1,5 @@
 # Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: GPL-3.0-or-later
 .text
 .globl _start
 .extern kernel64_main

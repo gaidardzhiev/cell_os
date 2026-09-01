@@ -1,0 +1,5 @@
+build/
+out/
+state/cellfs.img
+__pycache__/
+*.pyc

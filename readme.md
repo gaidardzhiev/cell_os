@@ -608,7 +608,7 @@ Several limitations of the original Cell OS remain relevant independently of Cor
 
 ## License
 
-The project is released under the MIT License. The original project version is tracked as `1.0.0-eukaryote-spine`; Cortex and CellLM are experimental extensions within the same repository and should not be interpreted as a change to the meaning of that historical version identifier unless the project version is explicitly advanced.
+The project is released under the GPL3 License. The original project version is tracked as `1.0.0-eukaryote-spine`; Cortex and CellLM are experimental extensions within the same repository and should not be interpreted as a change to the meaning of that historical version identifier unless the project version is explicitly advanced.
 
 ## Further reading
 

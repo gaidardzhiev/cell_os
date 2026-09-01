@@ -1,7 +1,7 @@
 ; Cell OS stage2, Cortex branch
 ; Based on cell_os commit 515d65c738e17163fe9419d75f4841aefefc32ef
 ; Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
-; SPDX-License-Identifier: MIT
+; SPDX-License-Identifier: GPL-3.0-or-later
 BITS 16
 org 0x8000
 
