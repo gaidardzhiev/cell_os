@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Cell OS Cortex self-contained x86 proof tree
+# Cell OS unified substrate, Cortex, CellFS, CellExec, and proof build graph
 CC ?= gcc
 LD ?= ld
 OBJCOPY ?= objcopy
@@ -15,8 +15,9 @@ STAGE2_BIN := $(BUILD_DIR)/stage2.bin
 KERNEL_ELF := $(BUILD_DIR)/kernel.elf
 KERNEL_BIN := $(BUILD_DIR)/kernel.bin
 HOST_TEST := $(BUILD_DIR)/test_cortex_host
-CELL_PROGRAM_SOURCES := programs/hello.cellasm programs/observe.cellasm
-CELL_PROGRAM_IMAGES := $(patsubst programs/%.cellasm,$(BUILD_DIR)/programs/%.cellx,$(CELL_PROGRAM_SOURCES))
+CELL_PROGRAM_SOURCES := programs/hello.c programs/observe.c
+CELL_PROGRAM_IMAGES := $(patsubst programs/%.c,$(BUILD_DIR)/programs/%.cellx,$(CELL_PROGRAM_SOURCES))
+HOST_CC := $(BUILD_DIR)/cc
 
 KERNEL_CFLAGS := -std=gnu11 -O2 -Wall -Wextra -Werror -ffreestanding \
 	-fno-pic -fno-pie -fno-plt -fno-stack-protector -fno-builtin \
@@ -34,6 +35,7 @@ KERNEL_SRCS := \
 	src/core/cellexec.c \
 	src/core/task.c \
 	src/core/shell.c \
+	src/core/cc.c \
 	src/cortex/cwm.c \
 	src/cortex/cortex.c \
 	src/cortex/session.c \
@@ -41,7 +43,7 @@ KERNEL_SRCS := \
 KERNEL_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(KERNEL_SRCS))
 KERNEL_ENTRY_OBJ := $(BUILD_DIR)/src/kernel/kernel_entry.o
 
-.PHONY: all clean reset-cellfs cortex-model cell-programs install-cell-programs test-cortex-host test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-shell test-exec-tools test-program-image test-cortex-session test-caploop cortex-x86 run-cortex-x86 check-tools
+.PHONY: all clean reset-cellfs cortex-model cell-programs install-cell-programs test-cortex-host test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-cc test-shell test-exec-tools test-program-image test-cortex-session test-caploop cortex-x86 run-cortex-x86 check-tools
 all: cortex-x86
 
 check-tools:
@@ -61,6 +63,10 @@ $(STAGE2_BIN): src/boot/stage2.asm
 $(KERNEL_ENTRY_OBJ): src/kernel/kernel_entry.S
 	@mkdir -p $(dir $@)
 	$(CC) -m64 -mno-red-zone -c $< -o $@
+
+$(BUILD_DIR)/src/core/cc.o: src/core/cc.c include/core/cc.h include/core/cellexec.h include/core/capability.h
+	@mkdir -p $(dir $@)
+	$(CC) $(filter-out -O2,$(KERNEL_CFLAGS)) -Os -c $< -o $@
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -93,9 +99,14 @@ reset-cellfs:
 	@$(MAKE) $(CELLFS_IMAGE)
 
 
-$(BUILD_DIR)/programs/%.cellx: programs/%.cellasm tools/cellasm.py
+$(HOST_CC): tools/cc.c src/core/cc.c src/core/cellexec.c include/core/cc.h include/core/cellexec.h include/core/capability.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
+		tools/cc.c src/core/cc.c src/core/cellexec.c -o $@
+
+$(BUILD_DIR)/programs/%.cellx: programs/%.c $(HOST_CC)
 	@mkdir -p $(dir $@)
-	python3 tools/cellasm.py $< $@
+	$(HOST_CC) $< -o $@
 
 cell-programs: $(CELL_PROGRAM_IMAGES)
 
@@ -162,10 +173,18 @@ $(BUILD_DIR)/test_task: src/core/cellexec.c src/core/task.c src/core/cellfs.c sr
 test-task: $(BUILD_DIR)/test_task
 	@$(BUILD_DIR)/test_task
 
-$(BUILD_DIR)/test_shell: src/core/shell.c src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_shell.c include/core/shell.h
+$(BUILD_DIR)/test_cc: src/core/cc.c src/core/cellexec.c tests/test_cc.c include/core/cc.h include/core/cellexec.h include/core/capability.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
-		src/core/shell.c src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_shell.c -o $@
+		src/core/cc.c src/core/cellexec.c tests/test_cc.c -o $@
+
+test-cc: $(BUILD_DIR)/test_cc
+	@$(BUILD_DIR)/test_cc
+
+$(BUILD_DIR)/test_shell: src/core/shell.c src/core/cc.c src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_shell.c include/core/shell.h include/core/cc.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
+		src/core/shell.c src/core/cc.c src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_shell.c -o $@
 
 test-shell: $(BUILD_DIR)/test_shell
 	@$(BUILD_DIR)/test_shell
@@ -181,10 +200,10 @@ $(BUILD_DIR)/test_program_image: src/core/cellexec.c src/core/task.c src/core/ce
 test-program-image: $(BUILD_DIR)/test_program_image install-cell-programs
 	@$(BUILD_DIR)/test_program_image $(CELLFS_IMAGE)
 
-$(BUILD_DIR)/test_cortex_session: src/cortex/cwm.c src/cortex/cortex.c src/cortex/session.c src/core/capability.c src/core/vfs.c src/core/cellfs.c src/core/cellexec.c src/core/task.c src/core/shell.c tests/test_cortex_session.c
+$(BUILD_DIR)/test_cortex_session: src/cortex/cwm.c src/cortex/cortex.c src/cortex/session.c src/core/capability.c src/core/vfs.c src/core/cellfs.c src/core/cellexec.c src/core/task.c src/core/shell.c src/core/cc.c tests/test_cortex_session.c
 	@mkdir -p $(BUILD_DIR)
 	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
-		src/cortex/cwm.c src/cortex/cortex.c src/cortex/session.c src/core/capability.c src/core/vfs.c src/core/cellfs.c src/core/cellexec.c src/core/task.c src/core/shell.c tests/test_cortex_session.c -o $@
+		src/cortex/cwm.c src/cortex/cortex.c src/cortex/session.c src/core/capability.c src/core/vfs.c src/core/cellfs.c src/core/cellexec.c src/core/task.c src/core/shell.c src/core/cc.c tests/test_cortex_session.c -o $@
 
 test-cortex-session: $(BUILD_DIR)/test_cortex_session cortex-model
 	@$(BUILD_DIR)/test_cortex_session $(CORTEX_MODEL)
@@ -198,7 +217,7 @@ $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN) $(CORTEX_MODEL) $(CELLFS_
 	@mkdir -p $(BUILD_DIR)
 	python3 scripts/pack_disk.py $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN) $@ --model $(CORTEX_MODEL) --cellfs $(CELLFS_IMAGE)
 
-test-caploop: test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-shell test-exec-tools test-program-image test-cortex-host test-cortex-session
+test-caploop: test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-cc test-shell test-exec-tools test-program-image test-cortex-host test-cortex-session
 
 cortex-x86: check-tools test-caploop $(DISK_IMG)
 	@echo '#CORTEX x86 image ready:' $(DISK_IMG)
@@ -506,13 +525,13 @@ test-e0-arm: $(TEST_E0_ARM)
 
 .PHONY: smoke run-x86-proof run-arm-proof
 run-x86-proof:
-	@test -f $(OUT)/cellos-x86_bios.img || (echo "missing $(OUT)/cellos-x86_bios.img — run: make release"; exit 1)
+	@test -f $(OUT)/cellos-x86_bios.img || (echo "missing $(OUT)/cellos-x86_bios.img, run: make release"; exit 1)
 	@mkdir -p $(TMPDIR)
 	@timeout 30s scripts/run_x86_qemu.sh $(OUT)/cellos-x86_bios.img | tee $(TMPDIR)/x86.log || true
 	@tools/verify_proofs.sh $(TMPDIR)/x86.log
 
 run-arm-proof:
-	@test -f $(OUT)/cellos-arm64.elf || (echo "missing $(OUT)/cellos-arm64.elf — run: make release"; exit 1)
+	@test -f $(OUT)/cellos-arm64.elf || (echo "missing $(OUT)/cellos-arm64.elf, run: make release"; exit 1)
 	@mkdir -p $(TMPDIR)
 	@timeout 30s scripts/run_arm64_qemu.sh $(OUT)/cellos-arm64.elf | tee $(TMPDIR)/arm.log || true
 	@tools/verify_proofs.sh $(TMPDIR)/arm.log

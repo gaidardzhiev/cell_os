@@ -2,7 +2,6 @@
  * Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
@@ -55,6 +54,8 @@ cell_vfs_status_t cell_vfs_read_bytes(cell_vfs_t *vfs, const char *path,
 cell_vfs_status_t cell_vfs_mkdir(cell_vfs_t *vfs, const char *path);
 cell_vfs_status_t cell_vfs_touch(cell_vfs_t *vfs, const char *path);
 cell_vfs_status_t cell_vfs_write(cell_vfs_t *vfs, const char *path, const char *text, int append);
+cell_vfs_status_t cell_vfs_write_bytes(cell_vfs_t *vfs, const char *path,
+	const void *data, size_t bytes, int append);
 cell_vfs_status_t cell_vfs_remove(cell_vfs_t *vfs, const char *path, int directory);
 cell_vfs_status_t cell_vfs_stat(cell_vfs_t *vfs, const cell_capability_env_t *env,
 	const char *path, char *out, size_t cap);

@@ -4,11 +4,15 @@
  */
 #include "core/shell.h"
 #include "core/capability.h"
+#include "core/cc.h"
 #include "core/task.h"
 #include "core/vfs.h"
 
 #define CELL_SHELL_MAX_ARGS 16u
 #define CELL_SHELL_BUFFER 512u
+
+static char cc_source[CELL_CC_SOURCE_MAX];
+static uint8_t cc_image[CELL_EXEC_FILE_MAX];
 
 typedef struct {
 	char storage[CELL_SHELL_BUFFER];
@@ -226,6 +230,40 @@ static int join_echo(const shell_words_t *w, uint32_t start, char *out, size_t c
 	return 1;
 }
 
+
+static cell_shell_result_t compile_c(const shell_words_t *w, const cell_capability_env_t *env,
+	char *out, size_t cap) {
+	if (!env || !env->vfs) { copy_text(out, cap, "cc: file system unavailable."); return CELL_SHELL_VFS; }
+	if (w->redirect) { copy_text(out, cap, "cc: shell redirection is not supported for compiler diagnostics."); return CELL_SHELL_VFS; }
+	const char *src = 0;
+	const char *dst = "a.out";
+	for (uint32_t i = 1; i < w->argc; ++i) {
+		if (str_eq(w->argv[i], "-o")) {
+			if (++i >= w->argc) { copy_text(out, cap, "cc: option requires an argument -- o"); return CELL_SHELL_VFS; }
+			dst = w->argv[i];
+		} else if (!src) src = w->argv[i];
+		else { copy_text(out, cap, "cc: too many input files."); return CELL_SHELL_VFS; }
+	}
+	if (!src) { copy_text(out, cap, "cc: no input files."); return CELL_SHELL_VFS; }
+	size_t source_bytes = 0;
+	cell_vfs_status_t vs = cell_vfs_read_bytes(env->vfs, src, cc_source, sizeof(cc_source), &source_bytes);
+	if (vs != CELL_VFS_OK) { copy_text(out, cap, "cc: "); append_text(out, cap, src); append_text(out, cap, ": ");
+		char err[64]; vfs_error(vs, err, sizeof(err)); append_text(out, cap, err); return CELL_SHELL_VFS; }
+	cell_cc_diag_t d; size_t image_bytes = 0;
+	if (!cell_cc_compile(cc_source, source_bytes, cc_image, sizeof(cc_image), &image_bytes, &d)) {
+		copy_text(out, cap, "cc: "); append_text(out, cap, src); append_text(out, cap, ":");
+		char num[16]; uint32_t v=d.line, n=0; char rev[16]; if (!v) v=1; do { rev[n++]=(char)('0'+v%10u); v/=10u; } while(v&&n<sizeof(rev));
+		uint32_t j=0; while(n&&j+1u<sizeof(num)) num[j++]=rev[--n]; num[j]=0; append_text(out,cap,num); append_text(out,cap,":");
+		v=d.column; n=0; if(!v)v=1; do { rev[n++]=(char)('0'+v%10u); v/=10u; } while(v&&n<sizeof(rev)); j=0; while(n&&j+1u<sizeof(num))num[j++]=rev[--n];num[j]=0;
+		append_text(out,cap,num); append_text(out,cap,": error: "); append_text(out,cap,d.message[0]?d.message:cell_cc_status_name(d.status));
+		return CELL_SHELL_VFS;
+	}
+	vs = cell_vfs_write_bytes(env->vfs, dst, cc_image, image_bytes, 0);
+	if (vs != CELL_VFS_OK) { copy_text(out, cap, "cc: "); append_text(out, cap, dst); append_text(out, cap, ": "); char err[64]; vfs_error(vs, err, sizeof(err)); append_text(out,cap,err); return CELL_SHELL_VFS; }
+	out[0] = 0;
+	return CELL_SHELL_VFS;
+}
+
 cell_shell_result_t cell_shell_execute(const char *line,
 	const cell_capability_env_t *env, char *out, size_t cap, uint32_t *pid) {
 	if (!line || !env || !out || !cap) return CELL_SHELL_NOT_HANDLED;
@@ -237,6 +275,8 @@ cell_shell_result_t cell_shell_execute(const char *line,
 	if (w.unsupported_operator) { copy_text(out, cap, "sh: operator not implemented yet."); return CELL_SHELL_VFS; }
 	if (!w.argc) return CELL_SHELL_NOT_HANDLED;
 	const char *cmd = w.argv[0];
+
+	if (str_eq(cmd, "cc")) return compile_c(&w, env, out, cap);
 
 	if (str_eq(cmd, "pwd")) {
 		if (w.argc != 1u || w.redirect) { copy_text(out, cap, "pwd: invalid argument."); return CELL_SHELL_VFS; }

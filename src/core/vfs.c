@@ -414,9 +414,9 @@ cell_vfs_status_t cell_vfs_touch(cell_vfs_t *vfs, const char *path) {
 	return create_common(vfs, path, 0);
 }
 
-cell_vfs_status_t cell_vfs_write(cell_vfs_t *vfs, const char *path,
-	const char *text, int append) {
-	if (!vfs || !text) return CELL_VFS_INVALID;
+cell_vfs_status_t cell_vfs_write_bytes(cell_vfs_t *vfs, const char *path,
+	const void *data, size_t bytes, int append) {
+	if (!vfs || (!data && bytes)) return CELL_VFS_INVALID;
 	char absolute[CELL_VFS_PATH_MAX];
 	if (!cell_vfs_normalize(vfs, path, absolute)) return CELL_VFS_INVALID;
 	if (!is_persistent_path(absolute)) return CELL_VFS_READ_ONLY;
@@ -430,9 +430,14 @@ cell_vfs_status_t cell_vfs_write(cell_vfs_t *vfs, const char *path,
 	if (status != CELL_VFS_OK) return status;
 	const cellfs_inode_t *ino = cellfs_inode(&vfs->fs, id);
 	if (!ino || ino->type != CELLFS_TYPE_FILE) return CELL_VFS_IS_DIR;
-	size_t bytes = str_len(text);
 	if ((append ? (size_t)ino->size : 0u) + bytes > CELLFS_FILE_MAX) return CELL_VFS_TOO_LARGE;
-	return cellfs_write_file(&vfs->fs, id, text, bytes, append) ? CELL_VFS_OK : CELL_VFS_FULL;
+	return cellfs_write_file(&vfs->fs, id, data, bytes, append) ? CELL_VFS_OK : CELL_VFS_FULL;
+}
+
+cell_vfs_status_t cell_vfs_write(cell_vfs_t *vfs, const char *path,
+	const char *text, int append) {
+	if (!text) return CELL_VFS_INVALID;
+	return cell_vfs_write_bytes(vfs, path, text, str_len(text), append);
 }
 
 cell_vfs_status_t cell_vfs_remove(cell_vfs_t *vfs, const char *path, int directory) {

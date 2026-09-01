@@ -101,6 +101,24 @@ int main(void) {
 	k = cell_shell_execute("ps -p 2", &env, out, sizeof(out), &pid);
 	ok &= expect(k == CELL_SHELL_PROCESS && strstr(out, "2 exited 0 2 /programs/hello") != 0, "ps -p", out);
 
+	k = cell_shell_execute("echo '#include <stdio.h>' > /home/hello.c", &env, out, sizeof(out), &pid);
+	ok &= expect(k == CELL_SHELL_VFS && out[0] == 0, "create C source include", out);
+	k = cell_shell_execute("echo 'int main(void) { int n = 2; while (n) { puts(\"compiled C\"); n = n - 1; } return 0; }' >> /home/hello.c", &env, out, sizeof(out), &pid);
+	ok &= expect(k == CELL_SHELL_VFS && out[0] == 0, "create C source body", out);
+	k = cell_shell_execute("cc /home/hello.c -o /programs/chello", &env, out, sizeof(out), &pid);
+	ok &= expect(k == CELL_SHELL_VFS && out[0] == 0, "cc target compile", out);
+	k = cell_shell_execute("chello", &env, out, sizeof(out), &pid);
+	ok &= expect(k == CELL_SHELL_PROCESS && strcmp(out, "compiled C\ncompiled C\n") == 0, "execute compiled C", out);
+
+	cell_vfs_t remount;
+	cell_task_manager_t tasks2;
+	cell_capability_env_t env2 = {0};
+	if (!cell_vfs_mount(&remount, &disk, 0, 0, 0, 0, 0)) return 1;
+	cell_task_manager_init(&tasks2, cell_task_default_policy());
+	env2.vfs = &remount; env2.tasks = &tasks2; env2.cortex_ready = 1; env2.ata0_ready = 1;
+	k = cell_shell_execute("/programs/chello", &env2, out, sizeof(out), &pid);
+	ok &= expect(k == CELL_SHELL_PROCESS && strcmp(out, "compiled C\ncompiled C\n") == 0, "compiled C persists across remount", out);
+
 	ok &= expect(cell_shell_execute("run hello", &env, out, sizeof(out), &pid) == CELL_SHELL_NOT_HANDLED,
 		"legacy run removed", out);
 	ok &= expect(cell_shell_execute("tasks", &env, out, sizeof(out), &pid) == CELL_SHELL_NOT_HANDLED,
@@ -117,5 +135,7 @@ int main(void) {
 	puts("#SHELL quoting/redirection PASS");
 	puts("#SHELL /programs PATH execution PASS");
 	puts("#SHELL legacy proof commands absent PASS");
+	puts("#SHELL cc compile/install/run PASS");
+	puts("#SHELL compiled-program remount persistence PASS");
 	return 0;
 }
