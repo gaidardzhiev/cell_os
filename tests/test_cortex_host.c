@@ -1,7 +1,13 @@
+/*
+ * Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
+ * SPDX-License-Identifier: MIT
+ *
+ * This file is licensed under the MIT License.
+ * See the LICENSE file in the project root for full license text.
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <string.h>
 #include "cortex/cwm.h"
 #include "cortex/cortex.h"
 
@@ -13,21 +19,12 @@ int main(int argc, char **argv) {
 	cwm_model_t m; if(!cwm_open(&m,buf,(size_t)n)){fprintf(stderr,"bad model\n");return 1;}
 	size_t wn=cortex_workspace_bytes(&m); void *ws=calloc(1,wn); cortex_t c;
 	if(!cortex_init(&c,&m,ws,wn)){fprintf(stderr,"init failed\n");return 1;}
-	const unsigned char *p=(const unsigned char*)argv[2];
-	uint8_t last=0;
-	while(*p && c.pos<m.h->context_len-1){
-		last=*p;
-		cortex_feed(&c,*p++);
-	}
-	if(last!='\n' && c.pos<m.h->context_len-1){
-		cortex_feed(&c,(uint8_t)'\n');
-	}
-	for(int i=0;i<96 && c.pos<m.h->context_len-1;i++){
-		uint8_t t=cortex_next(&c);
-		if(t==0) break;
-		putchar((char)t);
-		fflush(stdout);
-		if(!cortex_feed(&c,t) || t=='\n') break;
+	const unsigned char *p=(const unsigned char*)argv[2]; uint8_t last=0;
+	while(*p && c.pos<m.h->context_len-1u){ last=*p; if(!cortex_feed(&c,*p++)) return 1; }
+	if(last!='\n' && c.pos<m.h->context_len-1u) if(!cortex_feed(&c,(uint8_t)'\n')) return 1;
+	for(int i=0;i<160 && c.pos<m.h->context_len-1u;i++){
+		uint8_t t=cortex_next(&c); if(t==0 || t=='\r' || t=='\n') break;
+		putchar((char)t); fflush(stdout); if(!cortex_feed(&c,t)) break;
 	}
 	putchar('\n'); free(ws); free(buf); return 0;
 }

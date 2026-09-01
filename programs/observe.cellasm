@@ -1,0 +1,18 @@
+; Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
+; SPDX-License-Identifier: MIT
+; This file is licensed under the MIT License.
+; See the LICENSE file in the project root for full license text.
+.gas 64
+.memory 0
+.cap system.status
+.cap memory.status
+.data intro "CellExec observation:\n"
+.data nl "\n"
+.entry start
+start:
+puts intro
+cap system.status r0
+puts nl
+cap memory.status r1
+puts nl
+halt 0

@@ -1,4 +1,4 @@
-# Cell OS v1.0.0 (spine — eukaryote track)
+# Cell OS v1.0.0 (spine  eukaryote track)
 
 Release date: 2025-12-14 (deterministic build; LC_ALL=C, TZ=UTC, SOURCE_DATE_EPOCH=1700000000)
 
@@ -16,11 +16,11 @@ Release date: 2025-12-14 (deterministic build; LC_ALL=C, TZ=UTC, SOURCE_DATE_EPO
 - E10: Reproducible release + self-test proofs (#E3…#E10 + FULL PROOF SUCCESS).
 
 ## Artifacts (out/)
-- `cellos-x86_bios.img` — raw BIOS disk image (Stage-1/2 + kernel).
-- `cellos-arm64.elf` — ARM64 virt kernel (PL011).
-- `phenos/*.pbin` — compiled phenotypes.
-- `MANIFEST.txt` — SHA256 + size per artifact.
-- `BUILDINFO.json` — toolchain/flags and SOURCE_DATE_EPOCH.
+- `cellos-x86_bios.img`  raw BIOS disk image (Stage-1/2 + kernel).
+- `cellos-arm64.elf`  ARM64 virt kernel (PL011).
+- `phenos/*.pbin`  compiled phenotypes.
+- `MANIFEST.txt`  SHA256 + size per artifact.
+- `BUILDINFO.json`  toolchain/flags and SOURCE_DATE_EPOCH.
 - Proof logs produced in CI: `x86.log`, `arm.log` (see `tools/verify_proofs.sh`).
 
 ## How to reproduce

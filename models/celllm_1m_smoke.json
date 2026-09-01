@@ -1,0 +1,28 @@
+{
+  "name": "CellLM-1M",
+  "language": "English",
+  "architecture": "CWM1",
+  "parameters": 1049984,
+  "vocab": 256,
+  "context": 256,
+  "d_model": 128,
+  "layers": 5,
+  "heads": 4,
+  "d_ff": 512,
+  "quantization": "Q8",
+  "cwm_bytes": 1054400,
+  "cwm_crc32": "6bb69ce8",
+  "capabilities": [
+    "cpu.info",
+    "display.info",
+    "gpu.info",
+    "memory.status",
+    "network.list",
+    "power.status",
+    "storage.list",
+    "storage.list_dir",
+    "storage.pwd",
+    "system.status",
+    "usb.list"
+  ]
+}

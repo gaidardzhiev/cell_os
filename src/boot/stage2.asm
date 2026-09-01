@@ -270,8 +270,14 @@ long64:
 	mov [BOOT_EXT_ADDR+32], rax
 	test rax, rax
 	jz .no_model
-	mov dword [BOOT_EXT_ADDR+40], 1
+	or dword [BOOT_EXT_ADDR+40], 1
 .no_model:
+	mov eax, [cellfs_sectors]
+	mov [BOOT_EXT_ADDR+44], eax
+	test eax, eax
+	jz .no_cellfs
+	or dword [BOOT_EXT_ADDR+40], 2
+.no_cellfs:
 
 	sub rsp, 168
 	xor rax, rax
@@ -324,6 +330,7 @@ dap3_lba: dq 0x8877665544332211
 kernel_bytes: dq 0xCAFEBABEDEADBEEF
 model_lba: dq 0x13579BDF2468ACE0
 model_bytes: dq 0x0F1E2D3C4B5A6978
+cellfs_sectors: dd 0xA1B2C3D4
 
 msg_s2: db "#E0 s2 start", 10, 0
 msg_a20: db "#E0 a20 ok", 10, 0

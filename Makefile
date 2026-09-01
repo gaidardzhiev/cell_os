@@ -1,18 +1,24 @@
 # Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
 # SPDX-License-Identifier: MIT
-# Licensed under the MIT License. See LICENSE in project root.
-
+#
+# This file is licensed under the MIT License.
+# See the LICENSE file in the project root for full license text.
+# Cell OS Cortex self-contained x86 proof tree
 CC ?= gcc
 LD ?= ld
 OBJCOPY ?= objcopy
 BUILD_DIR ?= build
 CORTEX_MODEL ?= models/cortex_demo.cwm
+CELLFS_IMAGE ?= state/cellfs.img
+CELLFS_SECTORS ?= 1024
 DISK_IMG := $(BUILD_DIR)/disk.img
 STAGE1_BIN := $(BUILD_DIR)/stage1.bin
 STAGE2_BIN := $(BUILD_DIR)/stage2.bin
 KERNEL_ELF := $(BUILD_DIR)/kernel.elf
 KERNEL_BIN := $(BUILD_DIR)/kernel.bin
 HOST_TEST := $(BUILD_DIR)/test_cortex_host
+CELL_PROGRAM_SOURCES := programs/hello.cellasm programs/observe.cellasm
+CELL_PROGRAM_IMAGES := $(patsubst programs/%.cellasm,$(BUILD_DIR)/programs/%.cellx,$(CELL_PROGRAM_SOURCES))
 
 KERNEL_CFLAGS := -std=gnu11 -O2 -Wall -Wextra -Werror -ffreestanding \
 	-fno-pic -fno-pie -fno-plt -fno-stack-protector -fno-builtin \
@@ -24,13 +30,20 @@ KERNEL_SRCS := \
 	src/kernel/runtime.c \
 	src/kernel/cortex_boot.c \
 	src/core/mem_arena.c \
+	src/core/cellfs.c \
+	src/core/vfs.c \
+	src/core/capability.c \
+	src/core/cellexec.c \
+	src/core/task.c \
+	src/core/shell.c \
 	src/cortex/cwm.c \
 	src/cortex/cortex.c \
+	src/cortex/session.c \
 	src/drivers/x86/ata_pio.c
 KERNEL_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(KERNEL_SRCS))
 KERNEL_ENTRY_OBJ := $(BUILD_DIR)/src/kernel/kernel_entry.o
 
-.PHONY: all clean cortex-model test-cortex-host cortex-x86 run-cortex-x86 check-tools
+.PHONY: all clean reset-cellfs cortex-model cell-programs install-cell-programs test-cortex-host test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-shell test-exec-tools test-program-image test-cortex-session test-caploop cortex-x86 run-cortex-x86 check-tools
 all: cortex-x86
 
 check-tools:
@@ -72,26 +85,129 @@ cortex-model:
 		python3 tools/cortex_train_demo.py $(CORTEX_MODEL); \
 	}
 
+
+$(CELLFS_IMAGE): scripts/mkcellfs.py
+	@mkdir -p $(dir $@)
+	python3 scripts/mkcellfs.py $@ --sectors $(CELLFS_SECTORS)
+
+reset-cellfs:
+	rm -f $(CELLFS_IMAGE)
+	@$(MAKE) $(CELLFS_IMAGE)
+
+
+$(BUILD_DIR)/programs/%.cellx: programs/%.cellasm tools/cellasm.py
+	@mkdir -p $(dir $@)
+	python3 tools/cellasm.py $< $@
+
+cell-programs: $(CELL_PROGRAM_IMAGES)
+
+install-cell-programs: cell-programs $(CELLFS_IMAGE) scripts/cellfs_install.py
+	@for p in $(CELL_PROGRAM_IMAGES); do \
+		name=$$(basename "$$p" .cellx); \
+		python3 scripts/cellfs_install.py $(CELLFS_IMAGE) "$$p" --name "$$name"; \
+	done
+
 $(HOST_TEST): src/cortex/cwm.c src/cortex/cortex.c tests/test_cortex_host.c include/cortex/cwm.h include/cortex/cortex.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
 		src/cortex/cwm.c src/cortex/cortex.c tests/test_cortex_host.c -o $@
+
+$(BUILD_DIR)/test_capability: src/core/capability.c src/core/vfs.c src/core/cellfs.c tests/test_capability.c include/core/capability.h include/core/vfs.h include/core/cellfs.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
+		src/core/capability.c src/core/vfs.c src/core/cellfs.c tests/test_capability.c -o $@
+
+test-capability: $(BUILD_DIR)/test_capability
+	@$(BUILD_DIR)/test_capability
+
+$(BUILD_DIR)/test_cellfs: src/core/cellfs.c tests/test_cellfs.c include/core/cellfs.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
+		src/core/cellfs.c tests/test_cellfs.c -o $@
+
+test-cellfs: $(BUILD_DIR)/test_cellfs
+	@$(BUILD_DIR)/test_cellfs
+
+$(BUILD_DIR)/test_cellfs_image: src/core/cellfs.c tests/test_cellfs_image.c include/core/cellfs.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
+		src/core/cellfs.c tests/test_cellfs_image.c -o $@
+
+test-cellfs-image: $(BUILD_DIR)/test_cellfs_image $(CELLFS_IMAGE)
+	@$(BUILD_DIR)/test_cellfs_image $(CELLFS_IMAGE)
+
+test-cellfs-tools: scripts/mkcellfs.py scripts/sync_cellfs.py scripts/pack_disk.py tests/test_cellfs_tools.py
+	@python3 tests/test_cellfs_tools.py
+
+$(BUILD_DIR)/test_vfs: src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_vfs.c include/core/cellfs.h include/core/vfs.h include/core/capability.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
+		src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_vfs.c -o $@
+
+test-vfs: $(BUILD_DIR)/test_vfs
+	@$(BUILD_DIR)/test_vfs
+
+
+$(BUILD_DIR)/test_cellexec: src/core/cellexec.c tests/test_cellexec.c include/core/cellexec.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
+		src/core/cellexec.c tests/test_cellexec.c -o $@
+
+test-cellexec: $(BUILD_DIR)/test_cellexec
+	@$(BUILD_DIR)/test_cellexec
+
+$(BUILD_DIR)/test_task: src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_task.c include/core/cellexec.h include/core/task.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
+		src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_task.c -o $@
+
+test-task: $(BUILD_DIR)/test_task
+	@$(BUILD_DIR)/test_task
+
+$(BUILD_DIR)/test_shell: src/core/shell.c src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_shell.c include/core/shell.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
+		src/core/shell.c src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_shell.c -o $@
+
+test-shell: $(BUILD_DIR)/test_shell
+	@$(BUILD_DIR)/test_shell
+
+test-exec-tools: tools/cellasm.py scripts/cellfs_install.py scripts/mkcellfs.py tests/test_exec_tools.py
+	@python3 tests/test_exec_tools.py
+
+$(BUILD_DIR)/test_program_image: src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_program_image.c
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
+		src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_program_image.c -o $@
+
+test-program-image: $(BUILD_DIR)/test_program_image install-cell-programs
+	@$(BUILD_DIR)/test_program_image $(CELLFS_IMAGE)
+
+$(BUILD_DIR)/test_cortex_session: src/cortex/cwm.c src/cortex/cortex.c src/cortex/session.c src/core/capability.c src/core/vfs.c src/core/cellfs.c src/core/cellexec.c src/core/task.c src/core/shell.c tests/test_cortex_session.c
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
+		src/cortex/cwm.c src/cortex/cortex.c src/cortex/session.c src/core/capability.c src/core/vfs.c src/core/cellfs.c src/core/cellexec.c src/core/task.c src/core/shell.c tests/test_cortex_session.c -o $@
+
+test-cortex-session: $(BUILD_DIR)/test_cortex_session cortex-model
+	@$(BUILD_DIR)/test_cortex_session $(CORTEX_MODEL)
 
 test-cortex-host: $(HOST_TEST) cortex-model
 	@out="$$( $(HOST_TEST) $(CORTEX_MODEL) 'cell> hello' )"; printf '%s\n' "$$out"; \
 		printf '%s\n' "$$out" | grep -q 'Hello. I am Cell Cortex' || { echo '#CORTEX host inference FAIL'; exit 1; }
 	@echo '#CORTEX host inference PASS'
 
-$(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN) $(CORTEX_MODEL) scripts/pack_disk.py
+$(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN) $(CORTEX_MODEL) $(CELLFS_IMAGE) install-cell-programs scripts/pack_disk.py
 	@mkdir -p $(BUILD_DIR)
-	python3 scripts/pack_disk.py $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN) $@ --model $(CORTEX_MODEL)
+	python3 scripts/pack_disk.py $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN) $@ --model $(CORTEX_MODEL) --cellfs $(CELLFS_IMAGE)
 
-cortex-x86: check-tools test-cortex-host $(DISK_IMG)
+test-caploop: test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-shell test-exec-tools test-program-image test-cortex-host test-cortex-session
+
+cortex-x86: check-tools test-caploop $(DISK_IMG)
 	@echo '#CORTEX x86 image ready:' $(DISK_IMG)
 
 run-cortex-x86: cortex-x86
 	@command -v qemu-system-x86_64 >/dev/null || { echo 'missing: qemu-system-x86_64'; exit 1; }
-	@scripts/run_cortex_x86.sh $(DISK_IMG)
+	@scripts/run_cortex_x86.sh $(DISK_IMG) $(CELLFS_IMAGE)
 
 clean:
 	rm -rf $(BUILD_DIR)

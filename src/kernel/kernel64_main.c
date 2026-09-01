@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
+ * SPDX-License-Identifier: MIT
+ *
+ * This file is licensed under the MIT License.
+ * See the LICENSE file in the project root for full license text.
+ */
 #include <stdint.h>
 #include "core/handoff.h"
 #include "kernel/console.h"
@@ -16,6 +23,21 @@ static inline uint8_t inb(uint16_t port) {
 	return v;
 }
 
+static void serial_init(void) {
+	/* Own COM1 explicitly: 115200 baud, 8N1, FIFO enabled. */
+	outb((uint16_t)(COM1_PORT + 1u), 0x00u);
+	outb((uint16_t)(COM1_PORT + 3u), 0x80u);
+	outb((uint16_t)(COM1_PORT + 0u), 0x01u);
+	outb((uint16_t)(COM1_PORT + 1u), 0x00u);
+	outb((uint16_t)(COM1_PORT + 3u), 0x03u);
+	outb((uint16_t)(COM1_PORT + 2u), 0xC7u);
+	outb((uint16_t)(COM1_PORT + 4u), 0x0Bu);
+
+	/* Discard stale firmware input, if any. */
+	while (inb((uint16_t)(COM1_PORT + 5u)) & 0x01u)
+		(void)inb(COM1_PORT);
+}
+
 void dbg_putchar(char c) {
 	outb(E9_PORT, (uint8_t)c);
 	while (!(inb((uint16_t)(COM1_PORT + 5u)) & 0x20u)) { }
@@ -32,6 +54,7 @@ static void put_hex64(uint64_t v) {
 }
 
 void kernel64_main(const handoff_t *ho) {
+	serial_init();
 	dbg_puts("#E1 Cell OS Cortex kernel\n");
 	if (!ho) { dbg_puts("#CORTEX no handoff\n"); for (;;) __asm__ volatile("hlt"); }
 	dbg_puts("#CORTEX mem_top=0x"); put_hex64(ho->mem_top); dbg_puts(" ext=0x"); put_hex64(ho->reserved); dbg_puts("\n");

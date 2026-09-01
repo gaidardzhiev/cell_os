@@ -23,6 +23,7 @@ The long-term objective is not to place an unrestricted language model in the ha
 - Clear separation between deterministic machine control and learned cognitive interpretation.
 - A compact native inference path that does not depend on Linux, libc, llama.cpp, GGML, or a conventional userspace runtime on the target system.
 - A capability-mediated interface in which learned components request named operations rather than issuing arbitrary MMIO, DMA, or privileged hardware operations.
+- Reuse established Unix/POSIX command names and C/POSIX-shell syntax whenever those semantics already exist; Cell-specific terminology is reserved for mechanisms that do not have a suitable conventional equivalent.
 
 ## System Overview
 
@@ -36,7 +37,7 @@ The proof ledger `#E1` through `#E10` is intended to make the system inspectable
 
 ## Cortex: Cognitive Mediation Layer
 
-Cell Cortex is an experimental native inference subsystem added to the x86_64 Cell OS path. Its role is semantic mediation: it receives a natural-language request, evaluates it with a compact causal language model, and emits either ordinary text or a symbolic request for a Cell capability.
+Cell Cortex is an experimental native inference subsystem added to the x86_64 Cell OS path. Its role is semantic mediation: it receives a natural-language request, evaluates it with a compact causal language model, and either produces ordinary text or requests a named Cell capability. The capability request is intercepted by a deterministic dispatcher rather than exposed as a privileged machine operation. The dispatcher executes only registered operations, serializes the result internally, and renders the verified result into a bounded human-readable response. The present milestone deliberately does not retrain CellLM to narrate capability results: the learned component performs intent routing, while factual system state remains under deterministic control.
 
 For example, the trained CellLM-1M model currently learns mappings of the following form:
 
@@ -94,6 +95,140 @@ The model is trained outside Cell OS with PyTorch and exported into the native C
 The first training corpus is synthetic and narrow. It contains English requests for system status, CPU information, memory status, storage enumeration, directory listing, network enumeration, GPU information, USB enumeration, display information, and power status, together with a small number of conversational and safety-oriented examples. The corpus is not intended to create a general-purpose conversational model.
 
 The present model should therefore be interpreted as a learned semantic controller for a bounded vocabulary of Cell operations, not as a claim of general intelligence.
+
+
+## Capability Dispatcher and Closed Loop
+
+The first capability-dispatch milestone implements a small, explicit registry rather than a generic command interpreter. A model-produced call is accepted only when the complete generated line matches one of the registered canonical forms. There is no prefix matching, arbitrary argument parsing, shell expansion, MMIO expression evaluation, or runtime driver synthesis.
+
+The current registry contains:
+
+```text
+system.status
+cpu.info
+memory.status
+storage.list
+storage.list_dir
+storage.pwd
+network.list
+gpu.info
+usb.list
+display.info
+power.status
+```
+
+The presence of a name in the registry does not imply that its hardware backend exists. The current deterministic implementations are deliberately limited:
+
+- `memory.status` derives memory information from the boot handoff, E820 map, and current Cortex memory arena;
+- `cpu.info` reads the x86 CPUID vendor/family/model/logical-processor fields;
+- `system.status` reports Cortex readiness, E820-derived usable memory, and whether the current ATA boot/model path is active;
+- `storage.list` reports the verified `ata0` path after the Cortex model has been successfully read;
+- `storage.list_dir` and `storage.pwd` are connected to the Cell VFS when CellFS is mounted;
+- network, GPU, USB, display, and power requests currently return explicit `status=unsupported` results because those hardware backends are not yet implemented.
+
+Capability results are serialized into a bounded ASCII representation, for example:
+
+```text
+<RESULT memory.status status=ok top_mib=512 usable_mib=511 free_mib=486>
+<RESULT storage.list_dir status=unsupported reason=no_vfs>
+```
+
+These result records are internal mediation data. Normal interactive use does not expose the intermediate `<CALL>` or `<RESULT>` records. The current session layer converts the verified result into a deterministic English response. This keeps dynamic hardware facts outside the language model until enough real execution traces exist to justify a later training pass.
+
+The current session layer permits at most one capability execution per human request. There is no recursive planner and no capability chain in this milestone. This is a deliberate bound, not a claim that one-shot routing is the final interaction architecture.
+
+## Cell VFS and CellFS-1
+
+The second Cortex substrate milestone adds a Cell-native virtual filesystem and a small persistent filesystem rather than importing a POSIX filesystem as an architectural dependency. The user-facing path syntax is intentionally familiar, but the namespace is not merely a disk directory tree.
+
+The current root is:
+
+```text
+/
+├── home/          persistent CellFS-1
+├── programs/      persistent CellFS-1
+├── models/        live virtual nodes
+├── system/        live virtual nodes
+└── devices/       live capability projections
+```
+
+`/home` and `/programs` are backed by the writable CellFS-1 volume. `/system`, `/devices`, and `/models` are generated from live Cell state. For example, reading `/devices/cpu` invokes the same deterministic CPU capability used by Cortex; no copy of the CPU description is stored as a disk file.
+
+The deterministic console surface intentionally reuses Unix/POSIX names instead of introducing Cell-specific synonyms:
+
+```sh
+pwd
+ls [path]
+cd [path]
+cat <path>
+stat <path>
+mkdir <path> [...]
+touch <path> [...]
+rm <path> [...]
+rmdir <path> [...]
+echo [text ...]
+echo "text" > <path>
+echo "text" >> <path>
+```
+
+The current shell lexer supports ordinary words, backslash quoting, single and double quotes, and stdout redirection with `>` and `>>`. Pipes, variables, pathname expansion, command lists, input redirection, background jobs, and the rest of the POSIX shell grammar are not implemented yet. The syntax is intentionally being extended in the POSIX-shell direction rather than by adding parallel Cell-only commands.
+
+These exact shell operations bypass language-model inference. Natural-language requests that CellLM-1M already knows, such as directory listing and working-directory queries, route through `storage.list_dir` and `storage.pwd` onto the same VFS state. There is no separate AI filesystem. Shell command recognition takes precedence over CellLM inference, while unrecognized natural-language input falls through to Cortex.
+
+CellFS-1 uses a deliberately small on-disk ABI: a 512-byte CRC-protected superblock, 64 fixed-size CRC-protected inode records, a parent/name directory namespace, and an append-only data allocator. The current maximum file size is 16 KiB. The writable CellFS image is kept independently from build scratch state, so `make clean` does not destroy persistent files. The QEMU run path synchronizes the writable CellFS tail back to `state/cellfs.img` after the reference machine exits.
+
+CellFS-1 is not presented as a mature general-purpose filesystem. It currently has no free-space reclamation, journal, transactional update protocol, permissions, links, sparse files, or large-file extent tree. Those are explicit later concerns. Corrupt structural metadata and CRC failures are rejected during mount rather than accepted silently.
+
+Text and binary access are also separated. `cat` accepts printable text files only; binary payloads such as CellExec images are loaded through the binary VFS path and are not emitted as control bytes to the console.
+
+## CellExec-1 and Task Execution
+
+The third substrate milestone establishes a runnable program boundary. Cell OS still does **not** execute arbitrary native x86 machine code from writable storage. Programs use a compact verified format named **CellExec-1** and run inside a bounded deterministic bytecode executor.
+
+A CellExec-1 image contains a fixed 64-byte header followed by fixed-width 8-byte instructions and an optional read-only data section. The header records code/data sizes, entry point, task-memory requirement, gas limit, declared capability mask, total image size, and CRC32 over the executable payload. The loader validates the complete image before creating a runnable task.
+
+The current verifier rejects at least:
+
+- invalid magic/version/header fields or inconsistent sizes;
+- payload CRC mismatch;
+- unknown opcodes or invalid registers;
+- entry points and branch targets outside the code section;
+- constant-data references outside the data section;
+- unknown capability bits;
+- capability instructions not explicitly declared by the executable;
+- task-memory requests above 4096 bytes;
+- zero or excessive gas budgets.
+
+The first instruction set is intentionally small: halt, immediate/register moves, integer add/subtract/multiply, bounded relative branches, constant text output, explicit capability calls, and byte load/store operations in task-local memory. The purpose is to establish the program ABI and execution boundary, not to claim a finished programming environment.
+
+Every program execution creates an internal task record with an explicit lifecycle:
+
+```text
+ready -> running -> exited
+                 -> faulted
+```
+
+The shell exposes that record through a process-style PID rather than requiring a separate Cell command vocabulary. Records retain exit/fault state, gas consumption, program path, and declared/granted capability masks. The current implementation stores the most recent eight records. Execution is synchronous in this milestone: task-local registers and memory are reused only after the previous task has stopped. There is no claim of preemptive multitasking yet.
+
+Capability ownership is explicit. A CellExec image must declare every capability it can invoke, and the declaration is still insufficient on its own: the task manager intersects it with the Cell OS task policy. The current default program policy permits read-only system/CPU/memory/storage observation capabilities. A program that requests another registered capability is rejected before execution even if the bytecode itself is otherwise valid. CellExec execution is also restricted to the `/programs` namespace.
+
+Program invocation follows ordinary shell expectations. `/programs` is the current executable search path, so a program can be invoked by name or explicit pathname:
+
+```sh
+hello
+/programs/observe
+ps
+ps -p 1
+```
+
+The persistent filesystem exposes the installed names `hello` and `observe`; the `.cellx` suffix is an internal build artifact, not part of the user-facing command name. The installer migrates the earlier proof-era `/programs/hello.cellx` and `/programs/observe.cellx` inode names in place when the payloads match. `ps` reports retained execution records and `ps -p PID` reports one record. The older proof commands `run`, `tasks`, `task`, `write`, and `append` are not part of the shell interface.
+
+A small assembler, `tools/cellasm.py`, converts `.cellasm` source into CellExec-1 images. `scripts/cellfs_install.py` installs or updates an image inside persistent `/programs` without reformatting CellFS and is idempotent when the program bytes have not changed. The build currently includes two proof programs:
+
+- `hello`, built from `hello.cellasm`, which writes a constant message and exits;
+- `observe`, built from `observe.cellasm`, which invokes the declared `system.status` and `memory.status` capabilities and renders their deterministic results.
+
+The assembler is a bootstrap/development tool and is not intended to become a separate high-level Cell language. The source-level direction is C syntax for compiled programs and POSIX-shell syntax for command scripting. A C-oriented SDK/compiler path, dynamic libraries, concurrent processes, signals, process inheritance, and a general scheduler are outside this milestone.
 
 ## CWM1 Model Format
 
@@ -156,12 +291,17 @@ The original Cell OS subsystems remain in place. The Cortex work extends the tre
 - `src/core/update.c`  dual-strand update and migration logic.
 - `libparcel/parcel.c`  parcel framing shared by target and host tooling.
 - `src/core/mem_arena.c`  bounded memory arena used by Cortex and other native allocations.
+- `src/core/cellfs.c` and `src/core/vfs.c`  persistent CellFS-1 storage and the unified live/persistent namespace.
+- `src/core/cellexec.c` and `src/core/task.c`  CellExec-1 verifier plus synchronous bounded task execution.
+- `src/core/shell.c`  deliberately small POSIX-shell-compatible command surface, quoting/redirection parser, `/programs` lookup, and `ps` interface.
+- `programs/`  small `.cellasm` proof programs assembled into persistent `/programs`.
 - `src/drivers/x86/ata_pio.c`  current x86 ATA PIO path used to load the model payload.
 - `src/cortex/cwm.c`  CWM1 parser and model validation.
 - `src/cortex/cortex.c`  native causal transformer inference implementation.
 - `src/kernel/cortex_boot.c`  Cortex model loading and interactive execution path.
 - `tools/celllm_train.py`  CellLM-1M PyTorch training and CWM1 export tool.
 - `tests/test_cortex_host.c`  native host-side CWM1/Cortex inference test.
+- `tests/test_cellexec.c`, `tests/test_task.c`, and `tests/test_program_image.c`  executable ABI, task-policy, gas/memory, and persistent-program execution tests.
 - `models/`  exported CWM checkpoints and model metadata.
 - `data/`  current CellLM training corpus.
 - `checkpoints/`  development training checkpoints where retained intentionally.
@@ -170,26 +310,9 @@ The original Cell OS subsystems remain in place. The Cortex work extends the tre
 
 ## Build and Run
 
-The original Cell OS build requires a POSIX host with the corresponding cross-toolchains, NASM, Python, Make, and QEMU for the desired targets.
+The repository still contains the original Cell OS substrate, proof sources, phenotypes, schemas, and host tooling. The current top-level `Makefile`, however, is Cortex-focused. The older full proof/release build graph has not yet been re-integrated into that top-level build after the Cortex work. This is known build-system debt and should not be confused with removal of the underlying source mechanisms.
 
-The original proof-oriented build path remains available:
-
-```bash
-cd cell_os
-make all phenotypes
-make kernel kernel-arm
-make pack-disk
-scripts/run_x86_qemu.sh build/disk.img | tee /tmp/x86.log
-scripts/run_arm64_qemu.sh build/arm64_kernel.elf | tee /tmp/arm.log
-```
-
-For a reproducible release drop:
-
-```bash
-cd cell_os
-make release
-ls ../out
-```
+The Cortex x86 path requires a POSIX development host with GCC/binutils, NASM, Python, Make, and QEMU for the reference boot test. The historical x86/arm64 proof sources remain useful evidence and reference material, but the legacy aggregate `make test-all` / release workflow should be treated as requiring Makefile re-integration before it is claimed as a current one-command build path.
 
 ### Cortex host inference
 
@@ -221,7 +344,44 @@ Run it under QEMU:
 make run-cortex-x86 CORTEX_MODEL=models/celllm_1m.cwm
 ```
 
-A successful Cortex boot reports the model dimensions before presenting the interactive `cell>` prompt. The current interaction path is through COM1 in the reference QEMU configuration.
+A successful Cortex boot reports the model dimensions before presenting the interactive `cell$` prompt. The user-facing prompt is shell-oriented; Cortex still feeds the historical `cell> ` prefix internally to CellLM-1M because that prefix is part of the current training corpus. The current interaction path uses the reference x86 serial-console backend in QEMU. The hardware binding is an implementation detail rather than part of the Cortex or VFS interface.
+
+During image construction, the proof programs in `programs/` are assembled and installed idempotently into the existing persistent CellFS image. Existing `/home` content is not reformatted. The same steps can be invoked explicitly:
+
+```bash
+make cell-programs
+make install-cell-programs
+```
+
+A custom CellExec-1 program can be assembled and installed without rebuilding the model:
+
+```bash
+python3 tools/cellasm.py my_program.cellasm build/programs/my_program.cellx
+python3 scripts/cellfs_install.py state/cellfs.img build/programs/my_program.cellx --name my_program
+```
+
+After boot, the current proof programs can be inspected and executed with the shell interface:
+
+```text
+cell$ ls /programs
+hello  observe
+cell$ hello
+Hello from CellExec-1.
+cell$ /programs/observe
+...
+cell$ ps
+PID STATE EXIT GAS COMMAND
+1 exited 0 2 /programs/hello
+2 exited 0 6 /programs/observe
+```
+
+File output uses normal shell redirection syntax:
+
+```sh
+echo "hello" > /home/test
+echo "more" >> /home/test
+cat /home/test
+```
 
 ### Training CellLM-1M
 
@@ -263,17 +423,17 @@ The exporter produces the CWM1/Q8 checkpoint used directly by Cortex.
 
 ## Testing
 
-The original `make test-all` path continues to exercise the host-side Cell OS components such as parcels, channel QoS, scheduler behavior, organelles, IRQ bridging, update and migration logic, observability, trust/MAC placeholders, KV storage, and phenotype loading.
+The original Cell OS source tree contains host tests and proof tooling for parcels, channel QoS, scheduler behavior, organelles, IRQ bridging, update and migration logic, observability, trust/MAC placeholders, KV storage, phenotype loading, and the x86/arm64 proof paths. Their previous aggregate Makefile wiring is not currently part of the Cortex-focused top-level `Makefile`; those targets should be re-integrated rather than described as already active.
 
-The end-to-end proof tools remain available:
+The Cortex capability loop adds a deterministic regression target before image construction:
 
 ```bash
-make run-x86-proof
-make run-arm-proof
-tools/verify_proofs.sh build/pf12_x86.log build/pf12_arm.log
+make test-caploop CORTEX_MODEL=models/celllm_1m.cwm
 ```
 
-The Cortex work adds three separate validation boundaries.
+`test-capability` verifies exact call parsing, rejection of unknown names, E820/memory result serialization, CPU result structure, system status, and deterministic rendering. `test-cellfs`/`test-vfs` verify persistent remount, namespace semantics, live capability nodes, and the binary/text boundary. `test-cellexec` validates the executable ABI and static verifier. `test-task` exercises lifecycle, gas exhaustion, task-local memory, capability policy, and the `/programs` execution boundary. `test-shell` verifies Unix/POSIX command names, shell quoting, `>`/`>>` redirection, `/programs` lookup, `ps`, and absence of the earlier proof command vocabulary. `test-program-image` executes assembler-produced programs after they have been installed into a persistent CellFS image. `test-cortex-session` drives the same shell, VFS, process/task, and learned capability-routing paths used by the bare-metal interactive session.
+
+The Cortex work also retains three model/runtime validation boundaries.
 
 First, the PyTorch model is evaluated after training to verify that representative English requests produce the intended symbolic actions.
 
@@ -281,7 +441,7 @@ Second, the exported Q8 CWM1 model is loaded by the independent C Cortex runtime
 
 Third, the same CWM1 payload is packed into the x86 Cell OS image and executed through the bare-metal Cortex runtime under QEMU.
 
-Representative validated host-side mappings for CellLM-1M include:
+Representative model-only host mappings for CellLM-1M include:
 
 ```text
 hello                   -> Hello. I am Cell Cortex.
@@ -295,7 +455,7 @@ list network interfaces -> <CALL network.list>
 list usb devices        -> <CALL usb.list>
 ```
 
-This validation demonstrates semantic mapping and inference consistency for the tested commands. It does not establish general language competence outside the narrow training distribution.
+These are model-runtime validation examples, not the final shell dispatch order. In the interactive system, established shell commands such as `ls` and installed executable names such as `hello` are handled deterministically before any input is offered to CellLM. Unrecognized natural-language text falls through to Cortex. This validation demonstrates semantic mapping and inference consistency for the tested model prompts; it does not establish general language competence outside the narrow training distribution.
 
 ## Implementation Notes
 
@@ -309,9 +469,24 @@ The QoS subsystem maintains per-channel token buckets and GAS accounting. The sc
 
 Organelles continue to provide bounded deterministic services. The intended capability-dispatch architecture for Cortex should connect learned symbolic requests to such bounded services rather than bypassing them.
 
-The current ATA PIO path and COM1 interaction are reference mechanisms for establishing the inference path under QEMU. They are not intended to define the final portable hardware layer.
+The current ATA PIO path and reference serial-console interaction are reference mechanisms for establishing the inference path under QEMU. They are not intended to define the final portable hardware layer.
 
 CellLM model training remains external because training and inference have different requirements. Cell OS needs only the compact model representation and deterministic inference implementation; it does not need PyTorch, CUDA, Python, or the optimizer state used during model development.
+
+
+### Source and License Policy
+
+Existing source-file license and copyright headers are part of the source and
+must be preserved when files are modified. New source files should use the
+project's corresponding license header. Refactoring or regeneration must not
+silently strip those headers.
+
+User-facing commands should reuse established Unix/POSIX names and semantics
+where they already exist. Compiled source-language work is intended to follow
+C syntax, while command scripting is intended to grow in the POSIX-shell
+direction. Cell-specific names are reserved for genuinely Cell-specific
+mechanisms such as CWM1, CellFS, CellExec, capability mediation, and the
+biological substrate vocabulary.
 
 ## Current Status
 
@@ -324,9 +499,65 @@ The repository currently establishes the following Cortex milestones:
 - an English-only 1,049,984-parameter CellLM-1M training pipeline;
 - export from PyTorch into CWM1/Q8;
 - host-side agreement for the tested semantic commands between the trained model and the independent C runtime;
-- interactive Cell Cortex execution through the x86 QEMU reference environment.
+- interactive Cell Cortex execution through the x86 QEMU reference environment;
+- a strict capability dispatcher with deterministic implementations for memory, CPU, system status, and current ATA storage enumeration;
+- structured capability results and deterministic human-readable responses without retraining CellLM;
+- CellLM-1M weights are unchanged by this milestone; no result-grounding retraining is required for the present deterministic loop;
+- explicit safe failure for registered capabilities whose deterministic backends are not yet present;
+- a Cell-native VFS combining persistent `/home` and `/programs` with live `/system`, `/devices`, and `/models` nodes;
+- persistent CellFS-1 storage with CRC-protected metadata and successful remount/rebuild persistence;
+- a verified CellExec-1 executable ABI with fixed-width bytecode, CRC, declared capabilities, bounded task memory, and gas;
+- a synchronous task lifecycle/history layer with explicit task capability policy and execution restricted to `/programs`;
+- assembler-to-CellFS-to-C-executor integration tests for persistent Cell programs;
+- a POSIX-oriented shell surface with conventional command names, quoting, `>`/`>>` redirection, `/programs` lookup, and `ps` process-history inspection.
 
 The important result is not the size or sophistication of CellLM-1M. The result is that a learned model can be trained outside the system, reduced to a compact native representation, loaded by Cell OS, and used as a semantic component without introducing a conventional operating-system runtime beneath it.
+
+
+## Validated Interactive Milestone
+
+The current x86_64 QEMU reference path has been exercised end to end with the
+unchanged CellLM-1M CWM1/Q8 checkpoint and the POSIX-oriented command surface.
+
+The validated interactive path includes:
+
+```text
+cell$ ls /programs
+hello  observe
+
+cell$ hello
+Hello from CellExec-1.
+
+cell$ /programs/observe
+CellExec observation:
+Cell OS is running. Cortex is ready; 511 MiB usable memory; storage ata0.
+Memory: 511 MiB usable; ... MiB remain available to Cell OS.
+
+cell$ ps
+PID STATE EXIT GAS COMMAND
+...
+
+cell$ echo "hello world" > /home/posix-test
+cell$ echo "second line" >> /home/posix-test
+cell$ cat /home/posix-test
+hello world
+second line
+```
+
+The persistent CellFS state survives the normal `make clean` / image rebuild
+workflow through `state/cellfs.img`. The build/install path is idempotent for
+the proof programs in `/programs`; rebuilding does not rewrite unchanged
+program payloads or require reformatting the filesystem.
+
+Natural-language requests continue to fall through to the unchanged CellLM-1M
+model only after deterministic shell-command and executable lookup. For
+example, `show memory` is interpreted by CellLM and resolved through the
+deterministic `memory.status` capability, while `ls`, `echo`, `ps`, and
+installed program names never require model inference.
+
+This validation establishes the current reference behavior. It does not claim
+complete POSIX conformance, concurrent process semantics, a mature filesystem,
+or portable PC hardware support beyond the tested reference backends.
 
 ## What Is Not Yet Demonstrated
 
@@ -334,9 +565,14 @@ The current work is deliberately narrower than the long-term architecture.
 
 - CellLM-1M is not a general-purpose language model and is not an AGI system.
 - Its training corpus is synthetic, small, and intentionally limited to a bounded set of English system-control expressions.
-- Symbolic `<CALL ...>` outputs are not yet a complete closed-loop hardware-control mechanism. The capability dispatcher remains the next architectural step.
-- Cortex does not yet provide a generalized driver layer for arbitrary Ethernet, GPU, NVMe, USB, display, or other PC hardware.
-- The present x86 hardware path is validated primarily through the QEMU/PC BIOS reference environment with legacy ATA model loading and COM1 interaction.
+- The current closed loop is intentionally single-action: CellLM routes the request once, the deterministic substrate executes at most one capability, and it does not yet plan or execute multi-step sequences.
+- CellExec tasks are currently synchronous; there is no preemptive or concurrent task scheduler in the Cortex execution path yet.
+- CellExec-1 intentionally does not admit arbitrary native x86 instructions from writable storage.
+- CellFS-1 currently uses append-only data allocation and has no reclamation or journal.
+- The only CellExec authoring frontend in this milestone is the small host-side `.cellasm` bootstrap assembler; the intended source-language frontend is C and that compiler/SDK path is not yet implemented.
+- Shell operations and executable lookup are deterministic and do not require CellLM retraining; unrecognized natural-language requests continue to fall through to Cortex.
+- Cortex does not yet provide verified Ethernet, GPU, NVMe, USB, display, or power backends; those registered capabilities currently report `unsupported`.
+- The present x86 hardware path is validated primarily through the QEMU/PC BIOS reference environment with legacy ATA model loading and the reference serial-console backend.
 - Real-hardware compatibility across heterogeneous PCs has not yet been established.
 - The current inference engine is optimized for simplicity and inspectability rather than maximum throughput.
 - There is no claim that CellLM-1M understands arbitrary natural-language requests outside its training distribution.
@@ -347,16 +583,17 @@ These limitations are intentional boundaries of the present milestone rather tha
 
 ## Near-Term Work
 
-The next useful steps are structural rather than simply increasing model size.
+The next useful steps remain structural rather than simply increasing model size.
 
-1. Implement a capability dispatcher that recognizes canonical Cortex calls such as `memory.status` and maps them to deterministic Cell services.
-2. Feed structured capability results back into Cortex so a request can become a complete language → capability → result → language cycle.
-3. Expand the generalized hardware layer through prevalidated backends rather than runtime-generated privileged code.
-4. Extend tests so unsupported capabilities fail explicitly and safely.
-5. Improve the inference kernels, beginning with wider SIMD and more efficient quantized matrix operations.
-6. Add broader English paraphrase coverage and negative examples before increasing model scale.
-7. Only after the semantic/control loop is stable, evaluate larger CellLM configurations such as 20M parameters.
-8. Preserve the existing Cell OS proof discipline by adding measurable Cortex milestones rather than substituting model output for system evidence.
+1. Define the first stable Cell programming SDK and a compiler path from C syntax into CellExec-compatible programs, rather than hand-writing bytecode.
+2. Evolve the synchronous task runner into a scheduler with explicit task budgets, blocking/wakeup semantics, events, and capability ownership that can integrate with the older Cell scheduler/GAS concepts.
+3. Add program access to carefully scoped VFS operations through new task capabilities rather than exposing filesystem internals directly.
+4. Re-integrate the Cortex-focused top-level Makefile with the older Cell OS proof/release graph so the new milestones extend rather than replace the established proof workflow.
+5. Expand the generalized hardware layer through prevalidated backends, with AHCI/NVMe and networking ahead of more complex GPU/USB work.
+6. Improve the inference kernels, beginning with wider SIMD and more efficient quantized matrix operations.
+7. Accumulate real capability and task execution traces first; only then retrain CellLM for broader paraphrases, program management, or result narration.
+8. Add persistent Cortex memory as substrate data rather than encoding machine state into model weights.
+9. Preserve the existing Cell OS proof discipline by adding measurable Cortex/VFS/CellExec milestones rather than substituting model output for system evidence.
 
 ## Limitations and Future Work of the Original Cell Substrate
 
