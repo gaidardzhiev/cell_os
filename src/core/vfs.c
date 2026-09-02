@@ -4,6 +4,7 @@
  */
 #include "core/vfs.h"
 #include "core/capability.h"
+#include "core/task.h"
 
 typedef struct {
 	char *p;
@@ -75,6 +76,59 @@ static void str_copy(char *dst, size_t cap, const char *src) {
 		++n;
 	}
 	dst[n] = 0;
+}
+
+static const cell_task_record_t *task_record_by_id(const cell_capability_env_t *env, uint32_t id) {
+	if (!env || !env->tasks || !id) return 0;
+	for (uint32_t i = 0; i < CELL_TASK_HISTORY; ++i) {
+		const cell_task_record_t *r = &env->tasks->history[i];
+		if (r->state != CELL_TASK_EMPTY && r->id == id) return r;
+	}
+	return 0;
+}
+
+static const cell_task_record_t *task_record_self(const cell_capability_env_t *env) {
+	if (!env || !env->tasks) return 0;
+	for (uint32_t i = 0; i < CELL_TASK_HISTORY; ++i) {
+		const cell_task_record_t *r = &env->tasks->history[i];
+		if (r->state == CELL_TASK_RUNNING) return r;
+	}
+	return 0;
+}
+
+static int parse_u32_component(const char *s, size_t n, uint32_t *value) {
+	if (!s || !n || !value) return 0;
+	uint64_t v = 0;
+	for (size_t i = 0; i < n; ++i) {
+		if (s[i] < '0' || s[i] > '9') return 0;
+		v = v * 10u + (uint32_t)(s[i] - '0');
+		if (v > 0xffffffffu) return 0;
+	}
+	if (!v) return 0;
+	*value = (uint32_t)v;
+	return 1;
+}
+
+static int proc_record_path(const cell_capability_env_t *env, const char *absolute,
+	const cell_task_record_t **record, const char **leaf) {
+	if (record) *record = 0;
+	if (leaf) *leaf = 0;
+	if (!absolute || !str_starts(absolute, "/proc/")) return 0;
+	const char *p = absolute + 6;
+	const char *slash = p;
+	while (*slash && *slash != '/') ++slash;
+	if (slash == p) return 0;
+	const cell_task_record_t *r = 0;
+	if ((size_t)(slash - p) == 4u && p[0]=='s' && p[1]=='e' && p[2]=='l' && p[3]=='f') {
+		r = task_record_self(env);
+	} else {
+		uint32_t id = 0;
+		if (!parse_u32_component(p, (size_t)(slash - p), &id)) return 0;
+		r = task_record_by_id(env, id);
+	}
+	if (record) *record = r;
+	if (leaf) *leaf = *slash == '/' ? slash + 1 : slash;
+	return 1;
 }
 
 const char *cell_vfs_status_name(cell_vfs_status_t status) {
@@ -155,9 +209,79 @@ int cell_vfs_normalize(const cell_vfs_t *vfs, const char *path,
 	return 1;
 }
 
-static int is_virtual_dir(const char *path) {
-	return str_eq(path, "/") || str_eq(path, "/system") ||
-		str_eq(path, "/devices") || str_eq(path, "/models");
+typedef enum {
+	VNODE_NONE = 0,
+	VNODE_MODEL_CORTEX,
+	VNODE_PROC_MEMINFO,
+	VNODE_DEV_CONSOLE,
+	VNODE_DEV_NULL,
+	VNODE_DEV_ZERO,
+	VNODE_DEV_ATA0,
+	VNODE_SYS_CPU_INFO,
+	VNODE_SYS_MEMORY_INFO,
+	VNODE_SYS_STORAGE_ATA0,
+	VNODE_SYS_CORTEX_STATUS,
+	VNODE_SYS_CORTEX_MODEL
+} vnode_id_t;
+
+typedef struct {
+	const char *path;
+	const char *listing;
+} vdir_def_t;
+
+static const vdir_def_t vdirs[] = {
+	{"/", "home/  programs/  models/  proc/  dev/  sys/"},
+	{"/models", "cortex"},
+	{"/proc", 0},
+	{"/dev", "console  null  zero  ata0"},
+	{"/sys", "cpu/  memory/  storage/  cortex/"},
+	{"/sys/cpu", "info"},
+	{"/sys/memory", "info"},
+	{"/sys/storage", "ata0"},
+	{"/sys/cortex", "status  model"}
+};
+
+static const struct { const char *path; vnode_id_t id; } vnodes[] = {
+	{"/models/cortex", VNODE_MODEL_CORTEX},
+	{"/proc/meminfo", VNODE_PROC_MEMINFO},
+	{"/dev/console", VNODE_DEV_CONSOLE},
+	{"/dev/null", VNODE_DEV_NULL},
+	{"/dev/zero", VNODE_DEV_ZERO},
+	{"/dev/ata0", VNODE_DEV_ATA0},
+	{"/sys/cpu/info", VNODE_SYS_CPU_INFO},
+	{"/sys/memory/info", VNODE_SYS_MEMORY_INFO},
+	{"/sys/storage/ata0", VNODE_SYS_STORAGE_ATA0},
+	{"/sys/cortex/status", VNODE_SYS_CORTEX_STATUS},
+	{"/sys/cortex/model", VNODE_SYS_CORTEX_MODEL}
+};
+
+static int is_static_virtual_dir(const char *path) {
+	for (size_t i = 0; i < sizeof(vdirs) / sizeof(vdirs[0]); ++i)
+		if (str_eq(path, vdirs[i].path)) return 1;
+	return 0;
+}
+
+static const char *static_dir_listing(const char *path) {
+	for (size_t i = 0; i < sizeof(vdirs) / sizeof(vdirs[0]); ++i)
+		if (str_eq(path, vdirs[i].path)) return vdirs[i].listing;
+	return 0;
+}
+
+static vnode_id_t virtual_node_id(const char *path) {
+	for (size_t i = 0; i < sizeof(vnodes) / sizeof(vnodes[0]); ++i)
+		if (str_eq(path, vnodes[i].path)) return vnodes[i].id;
+	return VNODE_NONE;
+}
+
+static int is_virtual_dir(const cell_capability_env_t *env, const char *path) {
+	if (is_static_virtual_dir(path)) return 1;
+	const cell_task_record_t *r = 0;
+	const char *leaf = 0;
+	return proc_record_path(env, path, &r, &leaf) && r && leaf && !*leaf;
+}
+
+static int is_device_stream(vnode_id_t id) {
+	return id == VNODE_DEV_NULL || id == VNODE_DEV_ZERO || id == VNODE_DEV_CONSOLE;
 }
 
 static int is_persistent_path(const char *path) {
@@ -215,9 +339,71 @@ static cell_vfs_status_t split_parent(cell_vfs_t *vfs, const char *path,
 
 static cell_vfs_status_t capability_text(const cell_capability_env_t *env,
 	cell_capability_id_t id, char *out, size_t cap) {
-	cell_capability_result_t result;
-	if (!env || !cell_capability_execute(env, id, &result)) return CELL_VFS_IO;
-	return cell_capability_human_response(&result, out, cap) ? CELL_VFS_OK : CELL_VFS_IO;
+	cell_capability_result_t r;
+	if (!env || !cell_capability_execute(env, id, &r)) return CELL_VFS_IO;
+	return cell_capability_human_response(&r, out, cap) ? CELL_VFS_OK : CELL_VFS_IO;
+}
+
+static cell_vfs_status_t proc_list(const cell_capability_env_t *env, char *out, size_t cap) {
+	sb_t b; sb_init(&b, out, cap);
+	sb_str(&b, "meminfo");
+	if (task_record_self(env)) sb_str(&b, "  self/");
+	if (env && env->tasks) {
+		uint32_t min_id = env->tasks->next_id > CELL_TASK_HISTORY ? env->tasks->next_id - CELL_TASK_HISTORY : 1u;
+		for (uint32_t id = min_id; id < env->tasks->next_id; ++id) {
+			if (!task_record_by_id(env, id)) continue;
+			sb_str(&b, "  "); sb_u64(&b, id); sb_char(&b, '/');
+		}
+	}
+	return b.ok ? CELL_VFS_OK : CELL_VFS_TOO_LARGE;
+}
+
+static cell_vfs_status_t proc_record_text(const cell_capability_env_t *env, const char *absolute,
+	char *out, size_t cap) {
+	const cell_task_record_t *r = 0; const char *leaf = 0;
+	if (!proc_record_path(env, absolute, &r, &leaf) || !r) return CELL_VFS_NOT_FOUND;
+	if (!leaf || !*leaf) return CELL_VFS_IS_DIR;
+	if (str_eq(leaf, "command")) { sb_t b; sb_init(&b, out, cap); sb_str(&b, r->path); sb_char(&b, '\n'); return b.ok ? CELL_VFS_OK : CELL_VFS_TOO_LARGE; }
+	if (!str_eq(leaf, "status")) return CELL_VFS_NOT_FOUND;
+	return cell_task_describe(env->tasks, r->id, out, cap) ? CELL_VFS_OK : CELL_VFS_TOO_LARGE;
+}
+
+static cell_vfs_status_t proc_meminfo(const cell_capability_env_t *env, char *out, size_t cap) {
+	return capability_text(env, CELL_CAP_MEMORY_STATUS, out, cap);
+}
+
+static cell_vfs_status_t model_text(cell_vfs_t *vfs, char *out, size_t cap) {
+	sb_t b; sb_init(&b, out, cap);
+	sb_str(&b, "Cortex model: "); sb_u64(&b, vfs->model_bytes); sb_str(&b, " bytes, vocab ");
+	sb_u64(&b, vfs->model_vocab); sb_str(&b, ", context "); sb_u64(&b, vfs->model_context);
+	sb_str(&b, ", d_model "); sb_u64(&b, vfs->model_d_model); sb_str(&b, ", layers ");
+	sb_u64(&b, vfs->model_layers); sb_char(&b, '.');
+	return b.ok ? CELL_VFS_OK : CELL_VFS_TOO_LARGE;
+}
+
+static cell_vfs_status_t sys_text(cell_vfs_t *vfs, const cell_capability_env_t *env,
+	vnode_id_t id, char *out, size_t cap) {
+	switch (id) {
+	case VNODE_SYS_CPU_INFO: return capability_text(env, CELL_CAP_CPU_INFO, out, cap);
+	case VNODE_SYS_MEMORY_INFO: return capability_text(env, CELL_CAP_MEMORY_STATUS, out, cap);
+	case VNODE_SYS_STORAGE_ATA0: return capability_text(env, CELL_CAP_STORAGE_LIST, out, cap);
+	case VNODE_SYS_CORTEX_STATUS: return capability_text(env, CELL_CAP_SYSTEM_STATUS, out, cap);
+	case VNODE_SYS_CORTEX_MODEL: return model_text(vfs, out, cap);
+	default: return CELL_VFS_NOT_FOUND;
+	}
+}
+
+static cell_vfs_status_t dev_text(const cell_capability_env_t *env, vnode_id_t id,
+	char *out, size_t cap) {
+	switch (id) {
+	case VNODE_DEV_NULL: out[0] = 0; return CELL_VFS_OK;
+	case VNODE_DEV_ZERO: out[0] = 0; return CELL_VFS_BINARY;
+	case VNODE_DEV_CONSOLE: str_copy(out, cap, "Cell OS console device.\n"); return CELL_VFS_OK;
+	case VNODE_DEV_ATA0:
+		if (!env || !env->ata0_ready) return CELL_VFS_NOT_FOUND;
+		str_copy(out, cap, "ata0: verified ATA PIO storage device.\n"); return CELL_VFS_OK;
+	default: return CELL_VFS_NOT_FOUND;
+	}
 }
 
 int cell_vfs_mount(cell_vfs_t *vfs, const cellfs_disk_t *disk,
@@ -263,24 +449,18 @@ static cell_vfs_status_t list_persistent(cell_vfs_t *vfs, uint32_t id,
 
 cell_vfs_status_t cell_vfs_list(cell_vfs_t *vfs, const cell_capability_env_t *env,
 	const char *path, char *out, size_t cap) {
-	(void)env;
 	char absolute[CELL_VFS_PATH_MAX];
 	if (!vfs || !vfs->mounted || !cell_vfs_normalize(vfs, path, absolute)) return CELL_VFS_INVALID;
-	if (str_eq(absolute, "/")) {
-		str_copy(out, cap, "home/  programs/  models/  system/  devices/");
-		return CELL_VFS_OK;
-	}
-	if (str_eq(absolute, "/system")) {
-		str_copy(out, cap, "status  cortex  memory");
-		return CELL_VFS_OK;
-	}
-	if (str_eq(absolute, "/devices")) {
-		str_copy(out, cap, "cpu  memory  storage  network  gpu  usb  display  power");
-		return CELL_VFS_OK;
-	}
-	if (str_eq(absolute, "/models")) {
-		str_copy(out, cap, "cortex");
-		return CELL_VFS_OK;
+	if (str_eq(absolute, "/proc")) return proc_list(env, out, cap);
+	const char *listing = static_dir_listing(absolute);
+	if (listing) { str_copy(out, cap, listing); return CELL_VFS_OK; }
+	{
+		const cell_task_record_t *r = 0; const char *leaf = 0;
+		if (proc_record_path(env, absolute, &r, &leaf)) {
+			if (!r) return CELL_VFS_NOT_FOUND;
+			if (leaf && !*leaf) { str_copy(out, cap, "status  command"); return CELL_VFS_OK; }
+			return CELL_VFS_NOT_DIR;
+		}
 	}
 	uint32_t id = 0;
 	cell_vfs_status_t status = resolve_persistent(vfs, absolute, &id);
@@ -288,11 +468,11 @@ cell_vfs_status_t cell_vfs_list(cell_vfs_t *vfs, const cell_capability_env_t *en
 	return list_persistent(vfs, id, out, cap);
 }
 
-cell_vfs_status_t cell_vfs_chdir(cell_vfs_t *vfs, const char *path,
-	char *out, size_t cap) {
+cell_vfs_status_t cell_vfs_chdir(cell_vfs_t *vfs, const cell_capability_env_t *env,
+	const char *path, char *out, size_t cap) {
 	char absolute[CELL_VFS_PATH_MAX];
 	if (!vfs || !vfs->mounted || !cell_vfs_normalize(vfs, path, absolute)) return CELL_VFS_INVALID;
-	if (!is_virtual_dir(absolute)) {
+	if (!is_virtual_dir(env, absolute)) {
 		uint32_t id = 0;
 		cell_vfs_status_t status = resolve_persistent(vfs, absolute, &id);
 		if (status != CELL_VFS_OK) return status;
@@ -309,47 +489,15 @@ cell_vfs_status_t cell_vfs_cat(cell_vfs_t *vfs, const cell_capability_env_t *env
 	char absolute[CELL_VFS_PATH_MAX];
 	if (!vfs || !vfs->mounted || !cell_vfs_normalize(vfs, path, absolute) || !out || !cap)
 		return CELL_VFS_INVALID;
-	if (is_virtual_dir(absolute)) return CELL_VFS_IS_DIR;
-	if (str_eq(absolute, "/system/status"))
-		return capability_text(env, CELL_CAP_SYSTEM_STATUS, out, cap);
-	if (str_eq(absolute, "/system/memory") || str_eq(absolute, "/devices/memory"))
-		return capability_text(env, CELL_CAP_MEMORY_STATUS, out, cap);
-	if (str_eq(absolute, "/devices/cpu"))
-		return capability_text(env, CELL_CAP_CPU_INFO, out, cap);
-	if (str_eq(absolute, "/devices/storage"))
-		return capability_text(env, CELL_CAP_STORAGE_LIST, out, cap);
-	if (str_eq(absolute, "/devices/network"))
-		return capability_text(env, CELL_CAP_NETWORK_LIST, out, cap);
-	if (str_eq(absolute, "/devices/gpu"))
-		return capability_text(env, CELL_CAP_GPU_INFO, out, cap);
-	if (str_eq(absolute, "/devices/usb"))
-		return capability_text(env, CELL_CAP_USB_LIST, out, cap);
-	if (str_eq(absolute, "/devices/display"))
-		return capability_text(env, CELL_CAP_DISPLAY_INFO, out, cap);
-	if (str_eq(absolute, "/devices/power"))
-		return capability_text(env, CELL_CAP_POWER_STATUS, out, cap);
-	if (str_eq(absolute, "/system/cortex")) {
-		str_copy(out, cap, "Cortex: ready; inference and capability mediation are active.");
-		return CELL_VFS_OK;
-	}
-	if (str_eq(absolute, "/models/cortex")) {
-		sb_t b;
-		sb_init(&b, out, cap);
-		sb_str(&b, "Cortex model: ");
-		sb_u64(&b, vfs->model_bytes);
-		sb_str(&b, " bytes, vocab ");
-		sb_u64(&b, vfs->model_vocab);
-		sb_str(&b, ", context ");
-		sb_u64(&b, vfs->model_context);
-		sb_str(&b, ", d_model ");
-		sb_u64(&b, vfs->model_d_model);
-		sb_str(&b, ", layers ");
-		sb_u64(&b, vfs->model_layers);
-		sb_char(&b, '.');
-		return b.ok ? CELL_VFS_OK : CELL_VFS_TOO_LARGE;
-	}
-	if (str_starts(absolute, "/system/") || str_starts(absolute, "/devices/") ||
-	    str_starts(absolute, "/models/")) return CELL_VFS_NOT_FOUND;
+	if (is_virtual_dir(env, absolute)) return CELL_VFS_IS_DIR;
+	vnode_id_t node = virtual_node_id(absolute);
+	if (node == VNODE_PROC_MEMINFO) return proc_meminfo(env, out, cap);
+	if (node == VNODE_MODEL_CORTEX) return model_text(vfs, out, cap);
+	if (node >= VNODE_DEV_CONSOLE && node <= VNODE_DEV_ATA0) return dev_text(env, node, out, cap);
+	if (node >= VNODE_SYS_CPU_INFO) return sys_text(vfs, env, node, out, cap);
+	if (str_starts(absolute, "/proc/")) return proc_record_text(env, absolute, out, cap);
+	if (str_starts(absolute, "/models/") || str_starts(absolute, "/proc/") ||
+	    str_starts(absolute, "/dev/") || str_starts(absolute, "/sys/")) return CELL_VFS_NOT_FOUND;
 
 	uint32_t id = 0;
 	cell_vfs_status_t status = resolve_persistent(vfs, absolute, &id);
@@ -386,6 +534,7 @@ cell_vfs_status_t cell_vfs_open_file(cell_vfs_t *vfs, const cell_capability_env_
 	if (size_out) *size_out = 0;
 	if (!vfs || !vfs->mounted || !absolute || !cell_vfs_normalize(vfs, path, absolute))
 		return CELL_VFS_INVALID;
+	vnode_id_t node = virtual_node_id(absolute);
 	if (!(mode & (CELL_VFS_OPEN_READ | CELL_VFS_OPEN_WRITE))) return CELL_VFS_INVALID;
 	if (mode & ~(CELL_VFS_OPEN_READ | CELL_VFS_OPEN_WRITE | CELL_VFS_OPEN_CREATE | CELL_VFS_OPEN_TRUNCATE))
 		return CELL_VFS_INVALID;
@@ -411,9 +560,14 @@ cell_vfs_status_t cell_vfs_open_file(cell_vfs_t *vfs, const cell_capability_env_
 		return CELL_VFS_OK;
 	}
 
+	if (is_device_stream(node)) {
+		if (mode & (CELL_VFS_OPEN_CREATE | CELL_VFS_OPEN_TRUNCATE)) return CELL_VFS_INVALID;
+		if (size_out) *size_out = 0u;
+		return CELL_VFS_OK;
+	}
 	if (mode & (CELL_VFS_OPEN_WRITE | CELL_VFS_OPEN_CREATE | CELL_VFS_OPEN_TRUNCATE))
 		return CELL_VFS_READ_ONLY;
-	if (is_virtual_dir(absolute)) return CELL_VFS_IS_DIR;
+	if (is_virtual_dir(env, absolute)) return CELL_VFS_IS_DIR;
 	char tmp[CELL_VFS_TEXT_MAX];
 	size_t bytes = 0;
 	cell_vfs_status_t status = virtual_read_text(vfs, env, absolute, tmp, sizeof(tmp), &bytes);
@@ -428,6 +582,7 @@ cell_vfs_status_t cell_vfs_read_at(cell_vfs_t *vfs, const cell_capability_env_t 
 	if (!vfs || !vfs->mounted || (!dst && cap)) return CELL_VFS_INVALID;
 	char absolute[CELL_VFS_PATH_MAX];
 	if (!cell_vfs_normalize(vfs, path, absolute)) return CELL_VFS_INVALID;
+	vnode_id_t node = virtual_node_id(absolute);
 
 	if (is_persistent_path(absolute)) {
 		uint32_t id = 0;
@@ -448,7 +603,14 @@ cell_vfs_status_t cell_vfs_read_at(cell_vfs_t *vfs, const cell_capability_env_t 
 		return CELL_VFS_OK;
 	}
 
-	if (is_virtual_dir(absolute)) return CELL_VFS_IS_DIR;
+	if (node == VNODE_DEV_NULL || node == VNODE_DEV_CONSOLE) return CELL_VFS_OK;
+	if (node == VNODE_DEV_ZERO) {
+		uint8_t *d = (uint8_t *)dst;
+		for (size_t i = 0; i < cap; ++i) d[i] = 0u;
+		if (bytes_out) *bytes_out = cap;
+		return CELL_VFS_OK;
+	}
+	if (is_virtual_dir(env, absolute)) return CELL_VFS_IS_DIR;
 	char tmp[CELL_VFS_TEXT_MAX];
 	size_t total = 0;
 	cell_vfs_status_t status = virtual_read_text(vfs, env, absolute, tmp, sizeof(tmp), &total);
@@ -598,13 +760,13 @@ cell_vfs_status_t cell_vfs_stat(cell_vfs_t *vfs, const cell_capability_env_t *en
 	if (!vfs || !cell_vfs_normalize(vfs, path, absolute) || !out || !cap) return CELL_VFS_INVALID;
 	sb_t b;
 	sb_init(&b, out, cap);
-	if (is_virtual_dir(absolute)) {
+	if (is_virtual_dir(env, absolute)) {
 		sb_str(&b, "virtual directory ");
 		sb_str(&b, absolute);
 		return b.ok ? CELL_VFS_OK : CELL_VFS_TOO_LARGE;
 	}
-	if (str_starts(absolute, "/system/") || str_starts(absolute, "/devices/") ||
-	    str_starts(absolute, "/models/")) {
+	if (str_starts(absolute, "/models/") || str_starts(absolute, "/proc/") ||
+	    str_starts(absolute, "/dev/") || str_starts(absolute, "/sys/")) {
 		char tmp[CELL_VFS_TEXT_MAX];
 		cell_vfs_status_t status = cell_vfs_cat(vfs, env, absolute, tmp, sizeof(tmp));
 		if (status != CELL_VFS_OK) return status;

@@ -101,7 +101,7 @@ The present model should therefore be interpreted as a learned semantic controll
 
 ## Capability Dispatcher and Closed Loop
 
-The first capability-dispatch milestone implements a small, explicit registry rather than a generic command interpreter. A model-produced call is accepted only when the complete generated line matches one of the registered canonical forms. There is no prefix matching, arbitrary argument parsing, shell expansion, MMIO expression evaluation, or runtime driver synthesis.
+The capability dispatcher implements a small, explicit registry rather than a generic command interpreter. A model-produced call is accepted only when the complete generated line matches one of the registered canonical forms. There is no prefix matching, arbitrary argument parsing, shell expansion, MMIO expression evaluation, or runtime driver synthesis.
 
 The current registry contains:
 
@@ -141,20 +141,23 @@ The current session layer permits at most one capability execution per human req
 
 ## Cell VFS and CellFS-1
 
-The second Cortex substrate milestone adds a Cell-native virtual filesystem and a small persistent filesystem rather than importing a POSIX filesystem as an architectural dependency. The user-facing path syntax is intentionally familiar, but the namespace is not merely a disk directory tree.
+The Cell storage substrate provides a Cell-native virtual filesystem and a small persistent filesystem rather than importing a POSIX filesystem as an architectural dependency. The user-facing path syntax is intentionally familiar, but the namespace is not merely a disk directory tree.
 
 The current root is:
 
 ```text
 /
 ├── home/          persistent CellFS-1
-├── programs/      persistent CellFS-1
-├── models/        live virtual nodes
-├── system/        live virtual nodes
-└── devices/       live capability projections
+├── programs/      persistent CellFS-1 executables
+├── models/        Cell-specific model projections
+├── proc/          live process and runtime state
+├── dev/           Cell device endpoints
+└── sys/           verified system and hardware projections
 ```
 
-`/home` and `/programs` are backed by the writable CellFS-1 volume. `/system`, `/devices`, and `/models` are generated from live Cell state. For example, reading `/devices/cpu` invokes the same deterministic CPU capability used by Cortex; no copy of the CPU description is stored as a disk file.
+`/home` and `/programs` are backed by the writable CellFS-1 volume. `/proc`, `/dev`, `/sys`, and `/models` are generated from live Cell state. The earlier experimental `/system` and `/devices` names have been replaced rather than retained as aliases. The public namespace now uses familiar Unix names where the underlying concepts are familiar. These namespaces are Cell-native VFS projections, not Linux ABI emulation.
+
+Only verified backends are projected through `/sys`. CPU, memory, the active ATA storage path, and Cortex state are visible because deterministic backends exist for them. Registered but unsupported network, GPU, USB, display, and power capabilities are not presented as filesystem hardware nodes until corresponding backends are implemented.
 
 The deterministic console surface intentionally reuses Unix/POSIX names instead of introducing Cell-specific synonyms:
 
@@ -185,7 +188,7 @@ Text and binary access are also separated. `cat` accepts printable text files on
 
 ## CellExec-1 and Task Execution
 
-The third substrate milestone establishes a runnable program boundary. Cell OS still does **not** execute arbitrary native x86 machine code from writable storage. Programs use a compact verified format named **CellExec-1** and run inside a bounded deterministic bytecode executor.
+CellExec establishes a runnable program boundary. Cell OS still does **not** execute arbitrary native x86 machine code from writable storage. Programs use a compact verified format named **CellExec-1** and run inside a bounded deterministic bytecode executor.
 
 A CellExec-1 image contains a fixed 64-byte header followed by fixed-width 8-byte instructions and an optional read-only data section. The header records code/data sizes, entry point, task-memory requirement, gas limit, declared capability mask, total image size, and CRC32 over the executable payload. The loader validates the complete image before creating a runnable task.
 
@@ -225,7 +228,7 @@ ps -p 1
 
 The persistent filesystem exposes the installed names `hello` and `observe`; the `.cellx` suffix is an internal build artifact, not part of the user-facing command name. The installer migrates the earlier proof-era `/programs/hello.cellx` and `/programs/observe.cellx` inode names in place when the payloads match. `ps` reports retained execution records and `ps -p PID` reports one record. The older proof commands `run`, `tasks`, `task`, `write`, and `append` are not part of the shell interface.
 
-The fourth substrate milestone adds a bootstrap C programming path without changing the CellExec-1 execution boundary. `cc` is both a host build tool and a deterministic shell builtin inside Cell OS. Both forms use the same parser and code generator and emit verified CellExec-1 images; compilation does not involve CellLM.
+The bootstrap C programming path operates without changing the CellExec-1 execution boundary. `cc` is both a host build tool and a deterministic shell builtin inside Cell OS. Both forms use the same parser and code generator and emit verified CellExec-1 images; compilation does not involve CellLM.
 
 The current process/runtime milestone extends that source contract with `int main(int argc, char **argv)`, task-local argument vectors, `char *` and `char **` access required for process arguments, `argv[i]`, dynamic `puts`, `putchar`, `strlen`, `strcmp`, `atoi`, integer division and modulo, comparison operators, unary logical negation, and expression-valued `return`. The compiler remains deliberately bounded. Unsupported C surface is rejected with source line/column diagnostics rather than silently reinterpreted.
 
@@ -299,20 +302,20 @@ The original Cell OS subsystems remain in place. The Cortex work extends the tre
 - `src/core/update.c`: dual-strand update and migration logic.
 - `libparcel/parcel.c`: parcel framing shared by target and host tooling.
 - `src/core/mem_arena.c`: bounded memory arena used by Cortex and other native allocations.
-- `src/core/cellfs.c` and `src/core/vfs.c`: persistent CellFS-1 storage and the unified live/persistent namespace.
+- `src/core/cellfs.c` and `src/core/vfs.c`: persistent CellFS-1 storage plus the unified live/persistent namespace, including Cell-native `/proc`, `/dev`, and `/sys` projections.
 - `src/core/cellexec.c` and `src/core/task.c`: CellExec-1 verifier plus synchronous bounded task execution, file descriptors, syscall dispatch, errno, bounded allocation, and the bounded function call stack.
 - `src/core/cc.c` and `include/core/cc.h`: bootstrap C parser/code generator shared by host `cc` and the target shell builtin.
 - `tools/cc.c`: host command-line frontend for the same bootstrap C compiler.
 - `sdk/include/`: initial C-facing SDK declarations for standard output, strings, integer conversion, file descriptors, file I/O, errno, bounded allocation, and explicit Cell capabilities.
 - `src/core/shell.c`: deliberately small POSIX-shell-compatible command surface, quoting/redirection parser, `/programs` lookup, `cc`, and `ps` interface.
-- `programs/`: C proof programs including `hello`, `observe`, and the argument/runtime proof, compiled into CellExec-1 and installed persistently into `/programs`.
+- `programs/`: C proof programs including `hello`, `observe`, `args`, and `sysview`, compiled into CellExec-1 and installed persistently into `/programs`.
 - `src/drivers/x86/ata_pio.c`: current x86 ATA PIO path used to load the model payload.
 - `src/cortex/cwm.c`: CWM1 parser and model validation.
 - `src/cortex/cortex.c`: native causal transformer inference implementation.
 - `src/kernel/cortex_boot.c`: Cortex model loading and interactive execution path.
 - `tools/celllm_train.py`: CellLM-1M PyTorch training and CWM1 export tool.
 - `tests/test_cortex_host.c`: native host-side CWM1/Cortex inference test.
-- `tests/test_cellexec.c`, `tests/test_task.c`, `tests/test_c_runtime.c`, and `tests/test_program_image.c`: executable ABI, task-policy, process ABI, C runtime, gas/memory, and persistent-program execution tests.
+- `tests/test_cellexec.c`, `tests/test_task.c`, `tests/test_c_runtime.c`, `tests/test_c_system.c`, and `tests/test_program_image.c`: executable ABI, task policy, process ABI, C runtime, descriptor/system interface, synthetic namespace, gas/memory, and persistent-program execution tests.
 - `models/`: exported CWM checkpoints and model metadata.
 - `data/`: current CellLM training corpus.
 - `checkpoints/`: development training checkpoints where retained intentionally.
@@ -469,7 +472,7 @@ The Cortex capability loop adds a deterministic regression target before image c
 make test-caploop CORTEX_MODEL=models/celllm_1m.cwm
 ```
 
-`test-capability` verifies exact call parsing, rejection of unknown names, E820/memory result serialization, CPU result structure, system status, and deterministic rendering. `test-cellfs`/`test-vfs` verify persistent remount, namespace semantics, live capability nodes, and the binary/text boundary. `test-cellexec` validates the executable ABI and static verifier. `test-task` exercises lifecycle, gas exhaustion, task-local memory, capability policy, and the `/programs` execution boundary. `test-cc` verifies the supported C parser/code generator, CellExec validation, capability inference, unsupported-surface rejection, and the current `argc/argv` and pointer/runtime subset. `test-c-runtime` verifies the process ABI, character-pointer and argument indexing, `puts`/`putchar`/`strlen`/`strcmp`/`atoi`, arithmetic comparisons, and expression returns. `test-c-system` verifies file descriptors, `open`/`close`/`read`/`write`/`lseek`, standard descriptors, `errno`, bounded allocation, writable namespace policy, live VFS reads, user-defined functions, bounded recursion, and pointer-indexed byte stores. `test-shell` verifies Unix/POSIX command names, quoting, `>`/`>>` redirection, `/programs` lookup, `cc`, persistent compiled programs, process argument forwarding, target-compiled descriptor I/O, `ps`, and absence of the earlier proof command vocabulary. `test-program-image` executes compiled programs after installation into persistent CellFS. `test-cortex-session` drives the same shell, VFS, process/task, compiler, and learned capability-routing paths used by the bare-metal interactive session.
+`test-capability` verifies exact call parsing, rejection of unknown names, E820/memory result serialization, CPU result structure, system status, and deterministic rendering. `test-cellfs`/`test-vfs` verify persistent remount, namespace semantics, live capability nodes, the binary/text boundary, descriptor range I/O, dynamic `/proc` process projections, `/dev` node semantics, and `/sys` hardware projections. `test-cellexec` validates the executable ABI and static verifier. `test-task` exercises lifecycle, gas exhaustion, task-local memory, capability policy, and the `/programs` execution boundary. `test-cc` verifies the supported C parser/code generator, CellExec validation, capability inference, unsupported-surface rejection, and the current `argc/argv` and pointer/runtime subset. `test-c-runtime` verifies the process ABI, character-pointer and argument indexing, `puts`/`putchar`/`strlen`/`strcmp`/`atoi`, arithmetic comparisons, and expression returns. `test-c-system` verifies file descriptors, `open`/`close`/`read`/`write`/`lseek`, standard descriptors, `errno`, bounded allocation, writable namespace policy, user-defined functions, bounded recursion, pointer-indexed byte stores, C access to `/proc/self`, C reads from `/sys`, and `/dev/null`, `/dev/zero`, and `/dev/console` semantics. `test-shell` verifies Unix/POSIX command names, quoting, `>`/`>>` redirection, `/programs` lookup, `cc`, persistent compiled programs, process argument forwarding, target-compiled descriptor I/O, `ps`, and absence of the earlier proof command vocabulary. `test-program-image` executes compiled programs after installation into persistent CellFS, including the `sysview` system-inspection proof. `test-cortex-session` drives the same shell, VFS, synthetic namespaces, process/task, compiler, and learned capability-routing paths used by the bare-metal interactive session.
 
 The Cortex work also retains three model/runtime validation boundaries.
 
@@ -541,7 +544,7 @@ The repository currently establishes the following Cortex and native-programming
 - a strict capability dispatcher with deterministic implementations for memory, CPU, system status, and current ATA storage enumeration;
 - structured capability results and deterministic human-readable responses without retraining CellLM;
 - explicit safe failure for registered capabilities whose deterministic backends are not yet present;
-- a Cell-native VFS combining persistent `/home` and `/programs` with live `/system`, `/devices`, and `/models` nodes;
+- a Cell-native VFS combining persistent `/home` and `/programs` with live `/proc`, `/dev`, `/sys`, and `/models` projections;
 - persistent CellFS-1 storage with CRC-protected metadata and successful remount/rebuild persistence;
 - a verified CellExec-1 executable ABI with fixed-width bytecode, CRC, declared capabilities, bounded task memory, and gas;
 - a synchronous task lifecycle/history layer with explicit task capability policy and execution restricted to `/programs`;
@@ -559,7 +562,12 @@ The repository currently establishes the following Cortex and native-programming
 - shell argument forwarding from quoted POSIX-oriented command input into compiled CellExec tasks;
 - process-history inspection through `ps`, including exit status, gas usage, and executable path;
 - a consolidated top-level build graph that retains the historical Cell OS proof targets without separate `e*.mk` fragments;
-- a freestanding x86 Cortex kernel measured at 59,852 bytes with the native C system interface included, remaining beneath the unchanged 65,024-byte conservative BIOS staging limit.
+- Cell-native `/proc`, `/dev`, and `/sys` namespaces available through both shell paths and the ordinary C descriptor interface;
+- dynamic `/proc/self` and retained PID projections backed by CellExec task history rather than stored files;
+- `/dev/null`, `/dev/zero`, `/dev/console`, and the verified ATA device projection with explicit device semantics;
+- `/sys` projections for verified CPU, memory, storage, and Cortex backends without placeholder hardware;
+- a bundled `sysview` C program that inspects the running system through ordinary `open`/`read`/`write`/`close`;
+- a freestanding x86 Cortex kernel measured at 60,300 bytes with the synthetic namespace layer included, remaining beneath the unchanged 65,024-byte conservative BIOS staging limit.
 
 The important result is no longer only that CellLM-1M can run natively. Cell OS now joins learned semantic mediation, deterministic capabilities, persistent storage, a verified executable format, a task process ABI, and a native C compilation path in one bootable system. C source entered at the `cell$` prompt can become a persistent verified program and execute without Linux, libc, GCC, Python, or another conventional operating system existing beneath the target runtime.
 
@@ -773,19 +781,81 @@ C source
 
 Host integration tests establish file creation, truncation, read/write offsets, seeking, standard descriptors, `errno`, bounded allocation, the `/home` write boundary, live VFS reads, user-defined functions, recursive bounded calls, and pointer-indexed byte stores. The shell regression additionally creates C source in `/home`, compiles it to `/programs`, executes it, and verifies that the resulting task writes a persistent file through `open`/`write`/`close`.
 
-The current freestanding kernel containing this interface measures:
+The native C system interface remains the descriptor foundation used by the synthetic Unix namespaces described below. File-backed and live VFS objects are intentionally reached through the same task-local descriptor machinery.
+
+## Cell-Native Synthetic Unix Namespaces
+
+Cell OS now exposes the familiar `/proc`, `/dev`, and `/sys` names as first-class VFS namespaces. They are not imported Linux filesystems and they do not promise Linux file contents or ABI compatibility. They are Cell-native projections designed to make conventional C and shell tooling possible without introducing a parallel Cell-specific command vocabulary.
+
+The active root is:
 
 ```text
-# cortex-kernel: 59852 bytes
+home/  programs/  models/  proc/  dev/  sys/
 ```
 
-The conservative BIOS staging limit remains unchanged at 65,024 bytes.
+The process namespace is generated from the existing CellExec task manager:
+
+```text
+/proc/meminfo
+/proc/self/status
+/proc/self/command
+/proc/<pid>/status
+/proc/<pid>/command
+```
+
+`/proc/self` resolves while a task is running. Numeric PID directories expose retained task history, including state, exit status, gas consumption, and command identity through the same underlying records used by `ps`. No separate process database is maintained for the filesystem view.
+
+The device namespace currently contains:
+
+```text
+/dev/console
+/dev/null
+/dev/zero
+/dev/ata0
+```
+
+`/dev/null` consumes writes and returns EOF on reads. `/dev/zero` returns zero-filled reads. `/dev/console` accepts task output through the same bounded execution output path; interactive descriptor input is not implemented yet. `/dev/ata0` projects the verified ATA storage backend as read-only device information. Device nodes are non-seekable and report `ESPIPE` for `lseek`.
+
+The system namespace exposes only backends that currently have deterministic implementations:
+
+```text
+/sys/cpu/info
+/sys/memory/info
+/sys/storage/ata0
+/sys/cortex/status
+/sys/cortex/model
+```
+
+CPU and memory data reuse the deterministic capability implementations already used by Cortex. Storage state comes from the verified ATA path. Cortex status and model metadata are live runtime projections. Network, GPU, USB, display, and power directories are deliberately absent until their backends become real rather than being represented as optimistic placeholders.
+
+Most importantly, these files are usable from ordinary compiled C programs. There is no `/proc` compiler builtin and no special `sysview` syscall. A task opens and reads the namespaces through the same `open`, `read`, `write`, `lseek`, and `close` interface used for CellFS files.
+
+The bundled `sysview` proof program exercises that boundary. It reads its own process status from `/proc/self/status`, reads CPU and memory state from `/sys`, validates zero-filled device reads and non-seekable device behavior, writes through `/dev/null`, and emits output through `/dev/console`. The program is compiled from C into CellExec-1 and installed into `/programs` by the normal program build path.
+
+Regression evidence includes:
+
+```text
+#SYNTHFS /proc process projections PASS
+#SYNTHFS /dev device nodes PASS
+#SYNTHFS /sys hardware projections PASS
+#SYNTHFS C /proc self access PASS
+#SYNTHFS C /sys capability projection PASS
+#SYNTHFS C /dev null zero console semantics PASS
+```
+
+The complete freestanding kernel containing the current compiler, descriptor interface, Cortex runtime, and synthetic namespaces measures:
+
+```text
+# cortex-kernel: 60300 bytes
+```
+
+The conservative BIOS staging limit remains unchanged at 65,024 bytes. The implementation was reduced from an early near-limit form rather than solving growth by weakening that boot boundary.
 
 ## Why This Milestone Matters
 
 Cell OS is still experimental, but the system has moved beyond a boot proof, a filesystem proof, an interpreter proof, or an AI demo considered separately. The current reference image combines all of them into one operating substrate.
 
-A human can boot Cell OS, create a C source file, invoke `cc` from the Cell OS prompt, produce a persistent executable, run it with arguments, use conventional file-descriptor I/O from that C program, allocate bounded task-local memory, inspect its exit status and gas usage, and still use natural-language requests through a native transformer whose actions are constrained by deterministic capabilities.
+A human can boot Cell OS, create a C source file, invoke `cc` from the Cell OS prompt, produce a persistent executable, run it with arguments, use conventional file-descriptor I/O from that C program, inspect live process, device, CPU, memory, storage, and Cortex state through `/proc`, `/dev`, and `/sys`, allocate bounded task-local memory, inspect exit status and gas usage, and still use natural-language requests through a native transformer whose actions are constrained by deterministic capabilities.
 
 There is deliberately no Linux userspace underneath this path. The target does not call GCC, Clang, Python, PyTorch, llama.cpp, GGML, or a host libc to compile and execute the program after boot. The compiler frontend, VFS, persistent filesystem, executable verifier, task runtime, capability dispatcher, transformer inference engine, and shell integration are Cell OS components.
 
@@ -810,7 +880,10 @@ The current work remains deliberately narrower than the long-term architecture.
 - File writes from ordinary compiled tasks are currently restricted to `/home`; a broader permissions and executable-installation model is future work.
 - The target `cc` currently resides in the trusted kernel/shell image rather than running as an ordinary CellExec process.
 - The compiler does not yet compile its own source inside Cell OS, so the system is not self-hosting.
-- Synthetic `/proc`, `/dev`, and `/sys` namespaces are planned but not yet implemented.
+- `/proc`, `/dev`, and `/sys` are intentionally compact Cell-native projections rather than Linux ABI replicas. There is no `opendir`/`readdir` C API yet, no symlink model, and no claim that Linux software can consume these trees unchanged.
+- `/proc` currently exposes the active task and retained task-history records rather than a preemptive concurrent process universe.
+- `/dev/console` has output semantics for compiled tasks, while descriptor-based interactive input remains unimplemented.
+- `/sys` intentionally omits network, GPU, USB, display, and power trees until verified hardware backends exist.
 - Cortex does not yet provide verified Ethernet, GPU, NVMe, USB, display, or power backends; those registered capabilities currently report `unsupported`.
 - The present x86 hardware path is validated primarily through the QEMU/PC BIOS reference environment with legacy ATA model loading and the reference serial-console backend.
 - Real-hardware compatibility across heterogeneous PCs has not yet been established.
@@ -822,24 +895,8 @@ These are explicit engineering boundaries, not hidden assumptions.
 
 ## Roadmap
 
-The next milestones continue from the working native C system interface toward synthetic Unix namespaces, a broader compiler, and eventually a self-hosting C environment without abandoning Cell OS verification and capability boundaries.
+The next milestones continue from the working native C system interface and synthetic Unix namespaces toward a broader compiler and eventually a self-hosting C environment without abandoning Cell OS verification and capability boundaries.
 
-
-### Cell-Native Synthetic Unix Namespaces
-
-Add familiar synthetic namespaces:
-
-```text
-/proc
-/dev
-/sys
-```
-
-These will be Cell-native VFS projections, not Linux ABI emulation. Familiar names are reused because the concepts are familiar; the implementation and exact data model remain Cell OS mechanisms.
-
-The descriptor API now provides the user-program access path for these namespaces. A compiled C utility should be able to inspect them through ordinary `open`/`read`/`close` operations rather than through new compiler intrinsics.
-
-A likely consequence is that utilities such as `ps` can eventually move out of the trusted shell path and become ordinary C programs that read process state through `/proc`. Device and system inspection can follow the same direction through `/dev` and `/sys`.
 
 ### Compiler and Language Expansion
 

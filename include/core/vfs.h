@@ -51,7 +51,8 @@ int cell_vfs_normalize(const cell_vfs_t *vfs, const char *path, char out[CELL_VF
 cell_vfs_status_t cell_vfs_pwd(const cell_vfs_t *vfs, char *out, size_t cap);
 cell_vfs_status_t cell_vfs_list(cell_vfs_t *vfs, const cell_capability_env_t *env,
 	const char *path, char *out, size_t cap);
-cell_vfs_status_t cell_vfs_chdir(cell_vfs_t *vfs, const char *path, char *out, size_t cap);
+cell_vfs_status_t cell_vfs_chdir(cell_vfs_t *vfs, const cell_capability_env_t *env,
+	const char *path, char *out, size_t cap);
 cell_vfs_status_t cell_vfs_cat(cell_vfs_t *vfs, const cell_capability_env_t *env,
 	const char *path, char *out, size_t cap);
 cell_vfs_status_t cell_vfs_read_bytes(cell_vfs_t *vfs, const char *path,

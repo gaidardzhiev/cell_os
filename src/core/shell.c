@@ -286,7 +286,7 @@ cell_shell_result_t cell_shell_execute(const char *line,
 		if (w.redirect || w.argc > 2u) { copy_text(out, cap, "cd: invalid argument."); return CELL_SHELL_VFS; }
 		const char *path = w.argc == 2u ? w.argv[1] : "/home";
 		char absolute[CELL_VFS_PATH_MAX];
-		cell_vfs_status_t s = env->vfs ? cell_vfs_chdir(env->vfs, path, absolute, sizeof(absolute)) : CELL_VFS_IO;
+		cell_vfs_status_t s = env->vfs ? cell_vfs_chdir(env->vfs, env, path, absolute, sizeof(absolute)) : CELL_VFS_IO;
 		if (s == CELL_VFS_OK) out[0] = 0;
 		return finish_vfs(s, out, cap);
 	}

@@ -124,7 +124,7 @@ int main(int argc, char **argv) {
 		ok &= expect(strcmp(r.response, "/") == 0, "pwd root", r.response);
 	}
 	if (!cortex_session_process(&c, "ls", &env, &r)) ok = 0;
-	else ok &= expect(strcmp(r.response, "home/  programs/  models/  system/  devices/") == 0,
+	else ok &= expect(strcmp(r.response, "home/  programs/  models/  proc/  dev/  sys/") == 0,
 		"root listing", r.response);
 	if (!cortex_session_process(&c, "cd /home", &env, &r)) ok = 0;
 	else ok &= expect(r.response[0] == 0, "cd is silent", r.response);
@@ -139,12 +139,15 @@ int main(int argc, char **argv) {
 	if (!cortex_session_process(&c, "stat notes/hello.txt", &env, &r)) ok = 0;
 	else ok &= expect(strstr(r.response, "file /home/notes/hello.txt size=36") == r.response,
 		"stat file", r.response);
-	if (!cortex_session_process(&c, "cd /devices", &env, &r)) ok = 0;
+	if (!cortex_session_process(&c, "cd /sys/cpu", &env, &r)) ok = 0;
 	else ok &= expect(r.response[0] == 0, "cd virtual silent", r.response);
-	if (!cortex_session_process(&c, "cat cpu", &env, &r)) ok = 0;
+	if (!cortex_session_process(&c, "cat info", &env, &r)) ok = 0;
 	else ok &= expect(strncmp(r.response, "CPU: ", 5) == 0, "cat live cpu", r.response);
-	if (!cortex_session_process(&c, "echo no > /system/status", &env, &r)) ok = 0;
+	if (!cortex_session_process(&c, "echo no > /sys/cortex/status", &env, &r)) ok = 0;
 	else ok &= expect(strcmp(r.response, "Read-only file system.") == 0, "virtual write refused", r.response);
+
+	if (!cortex_session_process(&c, "cd /sys", &env, &r)) ok = 0;
+	else ok &= expect(r.response[0] == 0, "cd sys silent", r.response);
 
 	if (!cortex_session_process(&c, "hello", &env, &r)) ok = 0;
 	else {
@@ -173,7 +176,7 @@ int main(int argc, char **argv) {
 		else {
 			ok &= expect(strcmp(r.first_pass, "<CALL storage.list_dir>") == 0,
 				"natural list maps to VFS", r.first_pass);
-			ok &= expect(strstr(r.response, "cpu") != 0, "natural list uses current /devices", r.response);
+			ok &= expect(strstr(r.response, "cpu") != 0, "natural list uses current /sys", r.response);
 		}
 	} else {
 		puts("#CORTEX natural-language capability session SKIP (demo/non-CellLM model)");

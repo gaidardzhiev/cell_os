@@ -8,6 +8,7 @@
 #include <string.h>
 #include "core/vfs.h"
 #include "core/capability.h"
+#include "core/task.h"
 
 #define SECTORS 1024u
 static uint8_t disk_bytes[SECTORS * CELLFS_SECTOR_SIZE];
@@ -54,17 +55,30 @@ int main(void) {
 	handoff_t ho = {0};
 	ho.mem_top = 512ull * 1024u * 1024u;
 	cell_mem_arena_t arena = {16ull * 1024u * 1024u, 512ull * 1024u * 1024u};
+	cell_task_manager_t tasks;
+	memset(&tasks, 0, sizeof(tasks));
+	tasks.next_id = 3u;
+	tasks.next_slot = 2u;
+	tasks.history[0].id = 1u;
+	tasks.history[0].state = CELL_TASK_EXITED;
+	tasks.history[0].exit_code = 6;
+	tasks.history[0].gas_used = 71u;
+	strcpy(tasks.history[0].path, "/programs/native");
+	tasks.history[1].id = 2u;
+	tasks.history[1].state = CELL_TASK_RUNNING;
+	tasks.history[1].gas_used = 9u;
+	strcpy(tasks.history[1].path, "/programs/sysview");
 	cell_capability_env_t env = {
 		.handoff = &ho, .boot_ext = &ext, .arena = &arena,
-		.cortex_ready = 1, .ata0_ready = 1, .vfs = vfs
+		.cortex_ready = 1, .ata0_ready = 1, .vfs = vfs, .tasks = &tasks
 	};
 	char out[CELL_VFS_TEXT_MAX];
 	int ok = 1;
 	ok &= expect(cell_vfs_list(vfs, &env, "/", out, sizeof(out)) == CELL_VFS_OK,
 		"list root", out);
-	ok &= expect(strcmp(out, "home/  programs/  models/  system/  devices/") == 0,
+	ok &= expect(strcmp(out, "home/  programs/  models/  proc/  dev/  sys/") == 0,
 		"root namespace exact", out);
-	ok &= expect(cell_vfs_chdir(vfs, "/home", out, sizeof(out)) == CELL_VFS_OK,
+	ok &= expect(cell_vfs_chdir(vfs, &env, "/home", out, sizeof(out)) == CELL_VFS_OK,
 		"cd /home", out);
 	ok &= expect(cell_vfs_pwd(vfs, out, sizeof(out)) == CELL_VFS_OK && strcmp(out, "/home") == 0,
 		"pwd /home", out);
@@ -89,23 +103,65 @@ int main(void) {
 	ok &= expect(cell_vfs_list(vfs, &env, "notes", out, sizeof(out)) == CELL_VFS_OK,
 		"list notes", out);
 	ok &= expect(strcmp(out, "hello.txt") == 0, "list file exact", out);
-	ok &= expect(cell_vfs_cat(vfs, &env, "/devices/cpu", out, sizeof(out)) == CELL_VFS_OK,
+	ok &= expect(cell_vfs_cat(vfs, &env, "/sys/cpu/info", out, sizeof(out)) == CELL_VFS_OK,
 		"read live CPU node", out);
 	ok &= expect(strncmp(out, "CPU: ", 5) == 0, "live CPU prefix", out);
 	{
 		char absolute[CELL_VFS_PATH_MAX]; char range[8] = {0}; size_t size = 0, got = 0;
-		ok &= expect(cell_vfs_open_file(vfs, &env, "/devices/cpu", CELL_VFS_OPEN_READ, absolute, &size) == CELL_VFS_OK && size >= 5u,
+		ok &= expect(cell_vfs_open_file(vfs, &env, "/sys/cpu/info", CELL_VFS_OPEN_READ, absolute, &size) == CELL_VFS_OK && size >= 5u,
 			"open live node through file interface", absolute);
 		ok &= expect(cell_vfs_read_at(vfs, &env, absolute, 0u, range, 5u, &got) == CELL_VFS_OK &&
 			got == 5u && memcmp(range, "CPU: ", 5u) == 0, "range read live node", 0);
-		ok &= expect(cell_vfs_open_file(vfs, &env, "/devices/cpu", CELL_VFS_OPEN_WRITE, absolute, &size) == CELL_VFS_READ_ONLY,
+		ok &= expect(cell_vfs_open_file(vfs, &env, "/sys/cpu/info", CELL_VFS_OPEN_WRITE, absolute, &size) == CELL_VFS_READ_ONLY,
 			"live node open-for-write rejected", 0);
 	}
 	ok &= expect(cell_vfs_cat(vfs, &env, "/models/cortex", out, sizeof(out)) == CELL_VFS_OK,
 		"read live model node", out);
 	ok &= expect(strstr(out, "1054400 bytes") != 0, "model bytes live", out);
-	ok &= expect(cell_vfs_write(vfs, "/system/status", "evil", 0) == CELL_VFS_READ_ONLY,
+	ok &= expect(cell_vfs_write(vfs, "/sys/cortex/status", "evil", 0) == CELL_VFS_READ_ONLY,
 		"virtual namespace is read only", 0);
+	ok &= expect(cell_vfs_list(vfs, &env, "/proc", out, sizeof(out)) == CELL_VFS_OK &&
+		strstr(out, "meminfo") && strstr(out, "self/") && strstr(out, "1/") && strstr(out, "2/"),
+		"list /proc projections", out);
+	ok &= expect(cell_vfs_cat(vfs, &env, "/proc/meminfo", out, sizeof(out)) == CELL_VFS_OK &&
+		strstr(out, "Memory:") && strstr(out, "MiB remain available"), "read /proc/meminfo", out);
+	ok &= expect(cell_vfs_cat(vfs, &env, "/proc/1/status", out, sizeof(out)) == CELL_VFS_OK &&
+		strstr(out, "1 exited 6 71 /programs/native"),
+		"read historical process status", out);
+	ok &= expect(cell_vfs_cat(vfs, &env, "/proc/self/status", out, sizeof(out)) == CELL_VFS_OK &&
+		strstr(out, "2 running - 9 /programs/sysview"), "read current process status", out);
+	ok &= expect(cell_vfs_list(vfs, &env, "/dev", out, sizeof(out)) == CELL_VFS_OK &&
+		strcmp(out, "console  null  zero  ata0") == 0, "list /dev", out);
+	ok &= expect(cell_vfs_cat(vfs, &env, "/dev/null", out, sizeof(out)) == CELL_VFS_OK && out[0] == 0,
+		"read /dev/null", out);
+	ok &= expect(cell_vfs_cat(vfs, &env, "/dev/zero", out, sizeof(out)) == CELL_VFS_BINARY,
+		"cat rejects binary /dev/zero", out);
+	{
+		char absolute[CELL_VFS_PATH_MAX]; uint8_t zero[8]; size_t size = 99u, got = 0;
+		memset(zero, 0xff, sizeof(zero));
+		ok &= expect(cell_vfs_open_file(vfs, &env, "/dev/zero", CELL_VFS_OPEN_READ, absolute, &size) == CELL_VFS_OK && size == 0u,
+			"open /dev/zero", absolute);
+		ok &= expect(cell_vfs_read_at(vfs, &env, absolute, 0u, zero, sizeof(zero), &got) == CELL_VFS_OK && got == sizeof(zero),
+			"read /dev/zero", 0);
+		for (size_t i = 0; i < sizeof(zero); ++i) ok &= expect(zero[i] == 0u, "zero device byte", 0);
+		ok &= expect(cell_vfs_open_file(vfs, &env, "/dev/null", CELL_VFS_OPEN_WRITE, absolute, &size) == CELL_VFS_OK,
+			"open /dev/null for write", absolute);
+	}
+	ok &= expect(cell_vfs_list(vfs, &env, "/sys", out, sizeof(out)) == CELL_VFS_OK &&
+		strstr(out, "cpu/") && strstr(out, "memory/") && strstr(out, "cortex/"), "list /sys", out);
+	ok &= expect(cell_vfs_cat(vfs, &env, "/sys/cpu/info", out, sizeof(out)) == CELL_VFS_OK &&
+		strncmp(out, "CPU: ", 5) == 0, "read /sys/cpu/info", out);
+	ok &= expect(cell_vfs_cat(vfs, &env, "/sys/memory/info", out, sizeof(out)) == CELL_VFS_OK &&
+		strstr(out, "Memory:") && strstr(out, "MiB remain available"), "read /sys/memory/info", out);
+	ok &= expect(cell_vfs_cat(vfs, &env, "/sys/storage/ata0", out, sizeof(out)) == CELL_VFS_OK &&
+		strstr(out, "Storage: 1 verified device"), "read /sys/storage/ata0", out);
+	ok &= expect(cell_vfs_cat(vfs, &env, "/sys/cortex/model", out, sizeof(out)) == CELL_VFS_OK &&
+		strstr(out, "1054400 bytes") && strstr(out, "layers 5"), "read /sys/cortex/model", out);
+	ok &= expect(cell_vfs_chdir(vfs, &env, "/proc/1", out, sizeof(out)) == CELL_VFS_OK && strcmp(out, "/proc/1") == 0,
+		"cd historical process directory", out);
+	ok &= expect(cell_vfs_list(vfs, &env, ".", out, sizeof(out)) == CELL_VFS_OK && strcmp(out, "status  command") == 0,
+		"list process directory", out);
+	ok &= expect(cell_vfs_chdir(vfs, &env, "/", out, sizeof(out)) == CELL_VFS_OK, "cd root after proc", out);
 	uint32_t programs = 0, binary_id = 0;
 	uint8_t binary_data[4] = {0x43, 0x45, 0x58, 0x00};
 	ok &= expect(cellfs_find_child(&vfs->fs, 1, "programs", &programs), "find programs", 0);
@@ -113,8 +169,8 @@ int main(void) {
 	ok &= expect(cellfs_write_file(&vfs->fs, binary_id, binary_data, sizeof(binary_data), 0), "write binary", 0);
 	ok &= expect(cell_vfs_cat(vfs, &env, "/programs/binary.cellx", out, sizeof(out)) == CELL_VFS_BINARY,
 		"cat refuses binary", out);
-	ok &= expect(cell_vfs_chdir(vfs, "../../devices", out, sizeof(out)) == CELL_VFS_OK &&
-		strcmp(out, "/devices") == 0, "normalize dotdot", out);
+	ok &= expect(cell_vfs_chdir(vfs, &env, "../../sys", out, sizeof(out)) == CELL_VFS_OK &&
+		strcmp(out, "/sys") == 0, "normalize dotdot", out);
 	ok &= expect(cell_vfs_list(vfs, &env, 0, out, sizeof(out)) == CELL_VFS_OK &&
 		strstr(out, "cpu") != 0, "list current virtual dir", out);
 
@@ -127,5 +183,8 @@ int main(void) {
 	puts("#VFS read-only virtual boundary PASS");
 	puts("#VFS binary/text boundary PASS");
 	puts("#VFS descriptor range I/O primitives PASS");
+	puts("#SYNTHFS /proc process projections PASS");
+	puts("#SYNTHFS /dev device nodes PASS");
+	puts("#SYNTHFS /sys hardware projections PASS");
 	return 0;
 }

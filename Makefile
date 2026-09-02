@@ -15,7 +15,7 @@ STAGE2_BIN := $(BUILD_DIR)/stage2.bin
 KERNEL_ELF := $(BUILD_DIR)/kernel.elf
 KERNEL_BIN := $(BUILD_DIR)/kernel.bin
 HOST_TEST := $(BUILD_DIR)/test_cortex_host
-CELL_PROGRAM_SOURCES := programs/hello.c programs/observe.c programs/args.c
+CELL_PROGRAM_SOURCES := programs/hello.c programs/observe.c programs/args.c programs/sysview.c
 CELL_PROGRAM_IMAGES := $(patsubst programs/%.c,$(BUILD_DIR)/programs/%.cellx,$(CELL_PROGRAM_SOURCES))
 HOST_CC := $(BUILD_DIR)/cc
 
@@ -133,10 +133,10 @@ $(HOST_TEST): src/cortex/cwm.c src/cortex/cortex.c tests/test_cortex_host.c incl
 	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
 		src/cortex/cwm.c src/cortex/cortex.c tests/test_cortex_host.c -o $@
 
-$(BUILD_DIR)/test_capability: src/core/capability.c src/core/vfs.c src/core/cellfs.c tests/test_capability.c include/core/capability.h include/core/vfs.h include/core/cellfs.h
+$(BUILD_DIR)/test_capability: src/core/capability.c src/core/vfs.c src/core/cellfs.c src/core/task.c src/core/cellexec.c tests/test_capability.c include/core/capability.h include/core/vfs.h include/core/cellfs.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
-		src/core/capability.c src/core/vfs.c src/core/cellfs.c tests/test_capability.c -o $@
+		src/core/capability.c src/core/vfs.c src/core/cellfs.c src/core/task.c src/core/cellexec.c tests/test_capability.c -o $@
 
 test-capability: $(BUILD_DIR)/test_capability
 	@$(BUILD_DIR)/test_capability
@@ -160,10 +160,10 @@ test-cellfs-image: $(BUILD_DIR)/test_cellfs_image $(CELLFS_IMAGE)
 test-cellfs-tools: scripts/mkcellfs.py scripts/sync_cellfs.py scripts/pack_disk.py tests/test_cellfs_tools.py
 	@python3 tests/test_cellfs_tools.py
 
-$(BUILD_DIR)/test_vfs: src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_vfs.c include/core/cellfs.h include/core/vfs.h include/core/capability.h
+$(BUILD_DIR)/test_vfs: src/core/cellfs.c src/core/vfs.c src/core/capability.c src/core/task.c src/core/cellexec.c tests/test_vfs.c include/core/cellfs.h include/core/vfs.h include/core/capability.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
-		src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_vfs.c -o $@
+		src/core/cellfs.c src/core/vfs.c src/core/capability.c src/core/task.c src/core/cellexec.c tests/test_vfs.c -o $@
 
 test-vfs: $(BUILD_DIR)/test_vfs
 	@$(BUILD_DIR)/test_vfs

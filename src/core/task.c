@@ -304,8 +304,15 @@ static int str_starts_task(const char *s, const char *prefix) {
 	return 1;
 }
 
+static int str_eq_task(const char *a, const char *b) {
+	if (!a || !b) return 0;
+	while (*a && *b) if (*a++ != *b++) return 0;
+	return *a == 0 && *b == 0;
+}
+
 static int task_path_writable(const char *absolute) {
-	return str_starts_task(absolute, "/home/");
+	return str_starts_task(absolute, "/home/") || str_eq_task(absolute, "/dev/null") ||
+		str_eq_task(absolute, "/dev/zero") || str_eq_task(absolute, "/dev/console");
 }
 
 static int vfs_errno(cell_vfs_status_t status) {
@@ -391,8 +398,13 @@ static int64_t sys_read(cell_task_manager_t *tm, cell_vfs_t *vfs,
 	uint32_t count = (uint32_t)count64;
 	uint8_t *dst = 0;
 	if (!pointer_span(exec, tm->memory, addr, count, 1, &dst)) return syscall_fail(tm, CELL_EFAULT);
-	if ((int)fd64 == CELL_STDIN_FILENO) { return 0; }
+	if ((int)fd64 == CELL_STDIN_FILENO) return 0;
 	cell_task_fd_t *f = &tm->fds[(int)fd64];
+	if (str_eq_task(f->path, "/dev/null") || str_eq_task(f->path, "/dev/console")) return 0;
+	if (str_eq_task(f->path, "/dev/zero")) {
+		for (uint32_t i = 0; i < count; ++i) dst[i] = 0u;
+		return count;
+	}
 	size_t got = 0;
 	cell_vfs_status_t st = cell_vfs_read_at(vfs, env, f->path, f->offset, dst, count, &got);
 	if (st != CELL_VFS_OK) return syscall_fail(tm, vfs_errno(st));
@@ -414,6 +426,11 @@ static int64_t sys_write(cell_task_manager_t *tm, cell_vfs_t *vfs,
 		return count;
 	}
 	cell_task_fd_t *f = &tm->fds[(int)fd64];
+	if (str_eq_task(f->path, "/dev/null") || str_eq_task(f->path, "/dev/zero")) return count;
+	if (str_eq_task(f->path, "/dev/console")) {
+		if (!output_bytes(out, src, count)) return syscall_fail(tm, CELL_EIO);
+		return count;
+	}
 	if (f->append) {
 		char absolute[CELL_VFS_PATH_MAX]; size_t size = 0;
 		cell_vfs_status_t ost = cell_vfs_open_file(vfs, env, f->path, CELL_VFS_OPEN_WRITE, absolute, &size);
@@ -433,6 +450,7 @@ static int64_t sys_lseek(cell_task_manager_t *tm, cell_vfs_t *vfs,
 		return syscall_fail(tm, CELL_EBADF);
 	if (fd64 <= CELL_STDERR_FILENO) return syscall_fail(tm, CELL_ESPIPE);
 	cell_task_fd_t *f = &tm->fds[(int)fd64];
+	if (str_starts_task(f->path, "/dev/")) return syscall_fail(tm, CELL_ESPIPE);
 	int64_t base = 0;
 	if (whence == CELL_SEEK_SET) base = 0;
 	else if (whence == CELL_SEEK_CUR) base = f->offset;

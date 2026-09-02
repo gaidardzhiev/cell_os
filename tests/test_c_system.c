@@ -118,7 +118,7 @@ int main(void) {
 
 	const char *live =
 		"#include <fcntl.h>\n#include <unistd.h>\n#include <stdlib.h>\n"
-		"int main(void) { int fd; int n; char *p; fd = open(\"/system/status\", O_RDONLY); "
+		"int main(void) { int fd; int n; char *p; fd = open(\"/sys/cortex/status\", O_RDONLY); "
 		"if (fd < 0) return 91; p = malloc(256); if (p == 0) return 92; "
 		"n = read(fd, p, 255); if (n <= 0) return 93; write(STDOUT_FILENO, p, n); close(fd); free(p); return 0; }\n";
 	ok &= expect(cell_cc_compile(live, strlen(live), image, sizeof(image), &image_bytes, &diag),
@@ -143,6 +143,32 @@ int main(void) {
 	ok &= expect(cell_task_describe(&tasks, pid, ps, sizeof(ps)) && strstr(ps, "exited 120") != 0,
 		"bounded recursive user function", ps);
 
+	const char *synthetic =
+		"#include <fcntl.h>\n#include <unistd.h>\n#include <stdlib.h>\n#include <errno.h>\n"
+		"int dump(char *path) { int fd; int n; char *p; fd = open(path, O_RDONLY); if (fd < 0) return 1; "
+		"p = malloc(256); if (p == 0) return 2; n = read(fd, p, 255); if (n <= 0) return 3; "
+		"if (write(STDOUT_FILENO, p, n) != n) return 4; free(p); return close(fd); }\n"
+		"int main(void) { int fd; int n; char *p; if (dump(\"/proc/self/status\") != 0) return 10; "
+		"if (dump(\"/sys/cpu/info\") != 0) return 20; p = malloc(4); if (p == 0) return 30; "
+		"fd = open(\"/dev/zero\", O_RDONLY); if (fd < 0) return 31; n = read(fd, p, 4); if (n != 4) return 32; "
+		"if (p[0] != 0) return 33; if (p[1] != 0) return 34; if (lseek(fd, 0, SEEK_SET) >= 0) return 35; "
+		"if (errno != ESPIPE) return 36; close(fd); fd = open(\"/dev/null\", O_WRONLY); if (fd < 0) return 40; "
+		"if (write(fd, \"discard\", 7) != 7) return 41; close(fd); fd = open(\"/dev/console\", O_WRONLY); "
+		"if (fd < 0) return 50; if (write(fd, \"console ok\\n\", 11) != 11) return 51; close(fd); free(p); return 0; }\n";
+
+	ok &= expect(cell_cc_compile(synthetic, strlen(synthetic), image, sizeof(image), &image_bytes, &diag),
+		"compile synthetic namespace program", diag.message);
+	if (!install(&vfs, "sysview", image, image_bytes)) return 1;
+	ok &= expect(cell_task_run(&tasks, &vfs, &env, "/programs/sysview", out, sizeof(out), &pid),
+		"run synthetic namespace program", out);
+	ok &= expect(strstr(out, "running -") != 0 && strstr(out, "/programs/sysview") != 0,
+		"/proc/self visible through fd", out);
+	ok &= expect(strstr(out, "CPU: ") != 0 && strstr(out, "logical processors") != 0,
+		"/sys/cpu/info visible through fd", out);
+	ok &= expect(strstr(out, "console ok\n") != 0, "/dev/console write through fd", out);
+	ok &= expect(cell_task_describe(&tasks, pid, ps, sizeof(ps)) && strstr(ps, "exited 0") != 0,
+		"synthetic namespace program exit status", ps);
+
 	if (!ok) return 1;
 	puts("#C-SYSTEM file descriptor table PASS");
 	puts("#C-SYSTEM open/close/read/write/lseek PASS");
@@ -153,5 +179,8 @@ int main(void) {
 	puts("#C-SYSTEM live VFS descriptor reads PASS");
 	puts("#C-SYSTEM user-defined functions and bounded call stack PASS");
 	puts("#C-SYSTEM pointer-indexed byte stores PASS");
+	puts("#SYNTHFS C /proc self access PASS");
+	puts("#SYNTHFS C /sys capability projection PASS");
+	puts("#SYNTHFS C /dev null zero console semantics PASS");
 	return 0;
 }
