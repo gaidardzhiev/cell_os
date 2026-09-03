@@ -15,7 +15,7 @@ STAGE2_BIN := $(BUILD_DIR)/stage2.bin
 KERNEL_ELF := $(BUILD_DIR)/kernel.elf
 KERNEL_BIN := $(BUILD_DIR)/kernel.bin
 HOST_TEST := $(BUILD_DIR)/test_cortex_host
-CELL_PROGRAM_SOURCES := programs/hello.c programs/observe.c programs/args.c programs/sysview.c
+CELL_PROGRAM_SOURCES := programs/hello.c programs/observe.c programs/args.c programs/sysview.c programs/cc.c
 CELL_PROGRAM_IMAGES := $(patsubst programs/%.c,$(BUILD_DIR)/programs/%.cellx,$(CELL_PROGRAM_SOURCES))
 HOST_CC := $(BUILD_DIR)/cc
 
@@ -43,7 +43,7 @@ KERNEL_SRCS := \
 KERNEL_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(KERNEL_SRCS))
 KERNEL_ENTRY_OBJ := $(BUILD_DIR)/src/kernel/kernel_entry.o
 
-.PHONY: all clean reset-cellfs cortex-model cell-programs install-cell-programs test-cortex-host test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-cc test-c-runtime test-c-system test-shell test-exec-tools test-program-image test-cortex-session test-caploop cortex-x86 run-cortex-x86 check-tools
+.PHONY: all clean reset-cellfs cortex-model cell-programs install-cell-programs test-cortex-host test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-cc test-c-runtime test-c-system test-shell test-exec-tools test-program-image test-cortex-session test-compiler-process test-bootloader-staging test-caploop cortex-x86 run-cortex-x86 check-tools
 all: cortex-x86
 
 check-tools:
@@ -72,7 +72,7 @@ $(BUILD_DIR)/src/core/cellexec.o: src/core/cellexec.c include/core/cellexec.h
 	@mkdir -p $(dir $@)
 	$(CC) $(filter-out -O2,$(KERNEL_CFLAGS)) -Os -c $< -o $@
 
-$(BUILD_DIR)/src/core/task.o: src/core/task.c include/core/task.h include/core/cellexec.h include/core/capability.h include/core/vfs.h include/core/syscall.h
+$(BUILD_DIR)/src/core/task.o: src/core/task.c include/core/task.h include/core/cellexec.h include/core/capability.h include/core/cc.h include/core/vfs.h include/core/syscall.h
 	@mkdir -p $(dir $@)
 	$(CC) $(filter-out -O2,$(KERNEL_CFLAGS)) -Os -c $< -o $@
 
@@ -93,7 +93,7 @@ $(KERNEL_ELF): $(KERNEL_ENTRY_OBJ) $(KERNEL_OBJS) src/kernel/kernel_x86.ld
 $(KERNEL_BIN): $(KERNEL_ELF)
 	$(OBJCOPY) -O binary $< $@
 	@bytes=$$(wc -c < $@); echo "# cortex-kernel: $$bytes bytes"; \
-		test $$bytes -le 65024 || { echo "kernel staging image exceeds conservative 127-sector BIOS read limit"; exit 1; }
+		test $$bytes -le 262144 || { echo "kernel staging image exceeds 256 KiB low-memory staging limit"; exit 1; }
 
 cortex-model:
 	@test -f $(CORTEX_MODEL) || { \
@@ -133,10 +133,10 @@ $(HOST_TEST): src/cortex/cwm.c src/cortex/cortex.c tests/test_cortex_host.c incl
 	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
 		src/cortex/cwm.c src/cortex/cortex.c tests/test_cortex_host.c -o $@
 
-$(BUILD_DIR)/test_capability: src/core/capability.c src/core/vfs.c src/core/cellfs.c src/core/task.c src/core/cellexec.c tests/test_capability.c include/core/capability.h include/core/vfs.h include/core/cellfs.h
+$(BUILD_DIR)/test_capability: src/core/capability.c src/core/vfs.c src/core/cellfs.c src/core/task.c src/core/cc.c src/core/cellexec.c tests/test_capability.c include/core/capability.h include/core/cc.h include/core/vfs.h include/core/cellfs.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
-		src/core/capability.c src/core/vfs.c src/core/cellfs.c src/core/task.c src/core/cellexec.c tests/test_capability.c -o $@
+		src/core/capability.c src/core/vfs.c src/core/cellfs.c src/core/task.c src/core/cc.c src/core/cellexec.c tests/test_capability.c -o $@
 
 test-capability: $(BUILD_DIR)/test_capability
 	@$(BUILD_DIR)/test_capability
@@ -160,10 +160,10 @@ test-cellfs-image: $(BUILD_DIR)/test_cellfs_image $(CELLFS_IMAGE)
 test-cellfs-tools: scripts/mkcellfs.py scripts/sync_cellfs.py scripts/pack_disk.py tests/test_cellfs_tools.py
 	@python3 tests/test_cellfs_tools.py
 
-$(BUILD_DIR)/test_vfs: src/core/cellfs.c src/core/vfs.c src/core/capability.c src/core/task.c src/core/cellexec.c tests/test_vfs.c include/core/cellfs.h include/core/vfs.h include/core/capability.h
+$(BUILD_DIR)/test_vfs: src/core/cellfs.c src/core/vfs.c src/core/capability.c src/core/task.c src/core/cc.c src/core/cellexec.c tests/test_vfs.c include/core/cellfs.h include/core/vfs.h include/core/capability.h include/core/cc.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
-		src/core/cellfs.c src/core/vfs.c src/core/capability.c src/core/task.c src/core/cellexec.c tests/test_vfs.c -o $@
+		src/core/cellfs.c src/core/vfs.c src/core/capability.c src/core/task.c src/core/cc.c src/core/cellexec.c tests/test_vfs.c -o $@
 
 test-vfs: $(BUILD_DIR)/test_vfs
 	@$(BUILD_DIR)/test_vfs
@@ -177,10 +177,10 @@ $(BUILD_DIR)/test_cellexec: src/core/cellexec.c tests/test_cellexec.c include/co
 test-cellexec: $(BUILD_DIR)/test_cellexec
 	@$(BUILD_DIR)/test_cellexec
 
-$(BUILD_DIR)/test_task: src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_task.c include/core/cellexec.h include/core/task.h
+$(BUILD_DIR)/test_task: src/core/cellexec.c src/core/task.c src/core/cc.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_task.c include/core/cellexec.h include/core/task.h include/core/cc.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
-		src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_task.c -o $@
+		src/core/cellexec.c src/core/task.c src/core/cc.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_task.c -o $@
 
 test-task: $(BUILD_DIR)/test_task
 	@$(BUILD_DIR)/test_task
@@ -220,10 +220,10 @@ test-shell: $(BUILD_DIR)/test_shell
 test-exec-tools: tools/cellasm.py scripts/cellfs_install.py scripts/mkcellfs.py tests/test_exec_tools.py
 	@python3 tests/test_exec_tools.py
 
-$(BUILD_DIR)/test_program_image: src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_program_image.c
+$(BUILD_DIR)/test_program_image: src/core/cellexec.c src/core/task.c src/core/cc.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_program_image.c include/core/cc.h
 	@mkdir -p $(BUILD_DIR)
 	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
-		src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_program_image.c -o $@
+		src/core/cellexec.c src/core/task.c src/core/cc.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_program_image.c -o $@
 
 test-program-image: $(BUILD_DIR)/test_program_image install-cell-programs
 	@$(BUILD_DIR)/test_program_image $(CELLFS_IMAGE)
@@ -236,6 +236,17 @@ $(BUILD_DIR)/test_cortex_session: src/cortex/cwm.c src/cortex/cortex.c src/corte
 test-cortex-session: $(BUILD_DIR)/test_cortex_session cortex-model
 	@$(BUILD_DIR)/test_cortex_session $(CORTEX_MODEL)
 
+$(BUILD_DIR)/test_compiler_process: src/core/cc.c src/core/cellexec.c tests/test_compiler_process.c include/core/cc.h include/core/cellexec.h include/core/capability.h include/core/syscall.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
+		src/core/cc.c src/core/cellexec.c tests/test_compiler_process.c -o $@
+
+test-compiler-process: $(BUILD_DIR)/test_compiler_process
+	@$(BUILD_DIR)/test_compiler_process programs/cc.c
+
+test-bootloader-staging:
+	@python3 tests/test_bootloader_staging.py
+
 test-cortex-host: $(HOST_TEST) cortex-model
 	@out="$$( $(HOST_TEST) $(CORTEX_MODEL) 'cell> hello' )"; printf '%s\n' "$$out"; \
 		printf '%s\n' "$$out" | grep -q 'Hello. I am Cell Cortex' || { echo '#CORTEX host inference FAIL'; exit 1; }
@@ -245,7 +256,7 @@ $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN) $(CORTEX_MODEL) $(CELLFS_
 	@mkdir -p $(BUILD_DIR)
 	python3 scripts/pack_disk.py $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN) $@ --model $(CORTEX_MODEL) --cellfs $(CELLFS_IMAGE)
 
-test-caploop: test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-cc test-c-runtime test-c-system test-shell test-exec-tools test-program-image test-cortex-host test-cortex-session
+test-caploop: test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-cc test-c-runtime test-c-system test-shell test-exec-tools test-program-image test-cortex-host test-cortex-session test-compiler-process test-bootloader-staging
 
 cortex-x86: check-tools test-caploop $(DISK_IMG)
 	@echo '#CORTEX x86 image ready:' $(DISK_IMG)

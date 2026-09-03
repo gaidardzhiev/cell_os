@@ -13,7 +13,9 @@ org 0x8000
 %define KERNEL_VIRT_ADDR 0xFFFFFFFF80100000
 %define KERNEL_PML4_HIGH (511*8)
 %define KERNEL_PDPT_HIGH (510*8)
-%define KERNEL_STAGE_ADDR 0x00020000
+%define KERNEL_STAGE_ADDR 0x00040000
+%define KERNEL_BIOS_CHUNK_SECTORS 64
+%define KERNEL_STAGE_LIMIT_BYTES 0x00040000
 %define KERNEL_STAGE_SEG (KERNEL_STAGE_ADDR >> 4)
 %define KERNEL_STAGE_OFF (KERNEL_STAGE_ADDR & 0xF)
 %define E820_MAP_ADDR 0x5000
@@ -69,13 +71,38 @@ start16:
 	out 0x92, al
 	mov si, msg_a20
 	call log_str16
-
-	; Load the packed kernel to a low staging buffer while BIOS services exist.
-	mov si, dap3
-	mov ah, 0x42
-	mov dl, [boot_drive_s2]
-	int 0x13
-	jc load_fail
+; Load the packed kernel to low memory in conservative EDD chunks.
+; 64 sectors is 32 KiB, below the 127-sector BIOS limit and arranged so
+; successive buffers do not cross a 64 KiB boundary.
+mov ax, [dap3_secs]
+mov [kernel_sectors_left], ax
+mov word [dap3_buf_off], KERNEL_STAGE_OFF
+mov word [dap3_buf_seg], KERNEL_STAGE_SEG
+.kernel_read_loop:
+mov ax, [kernel_sectors_left]
+test ax, ax
+jz .kernel_read_done
+cmp ax, KERNEL_BIOS_CHUNK_SECTORS
+jbe .kernel_chunk_ready
+mov ax, KERNEL_BIOS_CHUNK_SECTORS
+.kernel_chunk_ready:
+mov [kernel_chunk_sectors], ax
+mov [dap3_secs], ax
+mov si, dap3
+mov ah, 0x42
+mov dl, [boot_drive_s2]
+int 0x13
+jc load_fail
+mov ax, [kernel_chunk_sectors]
+sub [kernel_sectors_left], ax
+movzx eax, word [kernel_chunk_sectors]
+add dword [dap3_lba], eax
+adc dword [dap3_lba+4], 0
+mov ax, [kernel_chunk_sectors]
+shl ax, 5
+add [dap3_buf_seg], ax
+jmp .kernel_read_loop
+.kernel_read_done:
 	mov si, msg_kernel
 	call log_str16
 
@@ -320,6 +347,8 @@ pd: times 512 dq 0
 boot_drive_s2: db 0
 e820_count: dw 0
 
+kernel_sectors_left: dw 0
+kernel_chunk_sectors: dw 0
 dap3:
 	db 16, 0
 dap3_secs: dw 0x5AA5

@@ -276,7 +276,11 @@ cell_shell_result_t cell_shell_execute(const char *line,
 	if (!w.argc) return CELL_SHELL_NOT_HANDLED;
 	const char *cmd = w.argv[0];
 
-	if (str_eq(cmd, "cc")) return compile_c(&w, env, out, cap);
+	if (str_eq(cmd, "cc")) {
+		char cc_path[CELL_VFS_PATH_MAX];
+		if (!env->vfs || !env->tasks || !program_candidate(env->vfs, env, "cc", cc_path))
+			return compile_c(&w, env, out, cap);
+	}
 
 	if (str_eq(cmd, "pwd")) {
 		if (w.argc != 1u || w.redirect) { copy_text(out, cap, "pwd: invalid argument."); return CELL_SHELL_VFS; }

@@ -5,36 +5,31 @@
 #include "core/cellexec.h"
 
 static int reg_ok(uint8_t r) { return r < CELL_EXEC_REGS; }
-
-static int syscall_ok(uint8_t nr) {
-	return nr >= CELL_EXEC_SYS_OPEN && nr <= CELL_EXEC_SYS_FREE;
-}
-
+static int syscall_ok(uint8_t nr) { return nr >= CELL_EXEC_SYS_OPEN && nr <= CELL_EXEC_SYS_COMPILE; }
 static unsigned syscall_argc(uint8_t nr) {
 	switch (nr) {
 	case CELL_EXEC_SYS_ERRNO: return 0u;
 	case CELL_EXEC_SYS_CLOSE:
 	case CELL_EXEC_SYS_MALLOC:
 	case CELL_EXEC_SYS_FREE: return 1u;
-	case CELL_EXEC_SYS_OPEN: return 2u;
+	case CELL_EXEC_SYS_OPEN:
+	case CELL_EXEC_SYS_COMPILE: return 2u;
 	case CELL_EXEC_SYS_READ:
 	case CELL_EXEC_SYS_WRITE:
 	case CELL_EXEC_SYS_LSEEK: return 3u;
 	default: return 0u;
 	}
 }
-
 uint32_t cell_exec_crc32(const void *data, size_t bytes) {
 	const uint8_t *p = (const uint8_t *)data;
-	uint32_t crc = 0xFFFFFFFFu;
+	uint32_t crc = 0xffffffffu;
 	for (size_t i = 0; i < bytes; ++i) {
 		crc ^= p[i];
 		for (unsigned b = 0; b < 8u; ++b)
-			crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
+			crc = (crc >> 1) ^ (0xedb88320u & (0u - (crc & 1u)));
 	}
 	return ~crc;
 }
-
 const char *cell_exec_status_name(cell_exec_status_t status) {
 	switch (status) {
 	case CELL_EXEC_OK: return "ok";
@@ -55,41 +50,38 @@ const char *cell_exec_status_name(cell_exec_status_t status) {
 	default: return "unknown";
 	}
 }
-
 static int branch_target_ok(uint32_t pc, int32_t rel, uint32_t count) {
 	int64_t target = (int64_t)pc + 1 + (int64_t)rel;
 	return target >= 0 && target < (int64_t)count;
 }
-
 static int data_cstr_ok(const uint8_t *data, uint32_t bytes, uint32_t off) {
 	if (off >= bytes) return 0;
 	for (uint32_t i = off; i < bytes; ++i) if (data[i] == 0u) return 1;
 	return 0;
 }
-
 cell_exec_status_t cell_exec_open(cell_exec_t *exec, const void *blob, size_t bytes,
 	uint64_t known_capability_mask) {
 	if (!exec || !blob || bytes < CELL_EXEC_HEADER_BYTES) return CELL_EXEC_BAD_ARGUMENT;
 	const cell_exec_header_t *h = (const cell_exec_header_t *)blob;
 	if (h->magic != CELL_EXEC_MAGIC) return CELL_EXEC_BAD_MAGIC;
 	if (h->version != CELL_EXEC_VERSION) return CELL_EXEC_BAD_VERSION;
-	if (h->header_bytes != CELL_EXEC_HEADER_BYTES || h->instruction_bytes != CELL_EXEC_INSN_BYTES ||
-	    h->flags != CELL_EXEC_F_NONE || h->reserved0 != 0u || h->reserved1 != 0u)
+	if (h->header_bytes != CELL_EXEC_HEADER_BYTES || h->instruction_bytes != CELL_EXEC_INSN_BYTES || h->reserved1 != 0u)
 		return CELL_EXEC_BAD_HEADER;
-	if (!h->code_bytes || (h->code_bytes % CELL_EXEC_INSN_BYTES) != 0u)
-		return CELL_EXEC_BAD_SIZE;
+	if (h->flags == CELL_EXEC_F_NONE) {
+		if (h->reserved0 != 0u) return CELL_EXEC_BAD_HEADER;
+	} else if (h->flags == CELL_EXEC_F_STATIC_MEMORY) {
+		if (!h->reserved0 || h->reserved0 > h->memory_bytes) return CELL_EXEC_BAD_HEADER;
+	} else return CELL_EXEC_BAD_HEADER;
+	if (!h->code_bytes || (h->code_bytes % CELL_EXEC_INSN_BYTES) != 0u) return CELL_EXEC_BAD_SIZE;
 	uint64_t payload_bytes = (uint64_t)h->code_bytes + (uint64_t)h->data_bytes;
 	uint64_t total = (uint64_t)CELL_EXEC_HEADER_BYTES + payload_bytes;
-	if (total > CELL_EXEC_FILE_MAX || total != bytes || h->total_bytes != (uint32_t)total)
-		return CELL_EXEC_BAD_SIZE;
-	if (cell_exec_crc32((const uint8_t *)blob + CELL_EXEC_HEADER_BYTES, (size_t)payload_bytes) != h->payload_crc32)
-		return CELL_EXEC_BAD_CRC;
+	if (total > CELL_EXEC_FILE_MAX || total != bytes || h->total_bytes != (uint32_t)total) return CELL_EXEC_BAD_SIZE;
+	if (cell_exec_crc32((const uint8_t *)blob + CELL_EXEC_HEADER_BYTES, (size_t)payload_bytes) != h->payload_crc32) return CELL_EXEC_BAD_CRC;
 	uint32_t count = h->code_bytes / CELL_EXEC_INSN_BYTES;
 	if (h->entry_pc >= count) return CELL_EXEC_BAD_ENTRY;
 	if (h->memory_bytes > CELL_EXEC_MEMORY_MAX) return CELL_EXEC_BAD_MEMORY;
 	if (!h->gas_limit || h->gas_limit > CELL_EXEC_GAS_MAX) return CELL_EXEC_BAD_GAS;
 	if (h->capability_mask & ~known_capability_mask) return CELL_EXEC_BAD_CAPABILITY;
-
 	const cell_exec_insn_t *code = (const cell_exec_insn_t *)((const uint8_t *)blob + CELL_EXEC_HEADER_BYTES);
 	const uint8_t *data = (const uint8_t *)blob + CELL_EXEC_HEADER_BYTES + h->code_bytes;
 	for (uint32_t pc = 0; pc < count; ++pc) {
@@ -101,6 +93,10 @@ cell_exec_status_t cell_exec_open(cell_exec_t *exec, const void *blob, size_t by
 			if (!reg_ok(in->dst)) return CELL_EXEC_BAD_REGISTER;
 			break;
 		case CELL_EXEC_OP_MOV:
+		case CELL_EXEC_OP_ADDI:
+		case CELL_EXEC_OP_LOAD8:
+		case CELL_EXEC_OP_LOAD32:
+		case CELL_EXEC_OP_LOAD64:
 			if (!reg_ok(in->dst) || !reg_ok(in->a)) return CELL_EXEC_BAD_REGISTER;
 			break;
 		case CELL_EXEC_OP_ADD:
@@ -115,10 +111,12 @@ cell_exec_status_t cell_exec_open(cell_exec_t *exec, const void *blob, size_t by
 		case CELL_EXEC_OP_CMPGT:
 		case CELL_EXEC_OP_CMPGE:
 		case CELL_EXEC_OP_OR:
+		case CELL_EXEC_OP_AND:
+		case CELL_EXEC_OP_XOR:
+		case CELL_EXEC_OP_SHL:
+		case CELL_EXEC_OP_SHR:
+		case CELL_EXEC_OP_STRCMP:
 			if (!reg_ok(in->dst) || !reg_ok(in->a) || !reg_ok(in->b)) return CELL_EXEC_BAD_REGISTER;
-			break;
-		case CELL_EXEC_OP_ADDI:
-			if (!reg_ok(in->dst) || !reg_ok(in->a)) return CELL_EXEC_BAD_REGISTER;
 			break;
 		case CELL_EXEC_OP_JZ:
 		case CELL_EXEC_OP_JNZ:
@@ -142,11 +140,9 @@ cell_exec_status_t cell_exec_open(cell_exec_t *exec, const void *blob, size_t by
 			if (!reg_ok(in->dst)) return CELL_EXEC_BAD_REGISTER;
 			break;
 		}
-		case CELL_EXEC_OP_LOAD8:
-		case CELL_EXEC_OP_LOAD64:
-			if (!reg_ok(in->dst) || !reg_ok(in->a)) return CELL_EXEC_BAD_REGISTER;
-			break;
 		case CELL_EXEC_OP_STORE8:
+		case CELL_EXEC_OP_STORE32:
+		case CELL_EXEC_OP_STORE64:
 			if (!reg_ok(in->a) || !reg_ok(in->b)) return CELL_EXEC_BAD_REGISTER;
 			break;
 		case CELL_EXEC_OP_EXIT:
@@ -159,8 +155,7 @@ cell_exec_status_t cell_exec_open(cell_exec_t *exec, const void *blob, size_t by
 			if (!reg_ok(in->dst) || !reg_ok(in->a)) return CELL_EXEC_BAD_REGISTER;
 			break;
 		case CELL_EXEC_OP_STRCMPC:
-			if (!reg_ok(in->dst) || !reg_ok(in->a) || in->imm < 0 ||
-			    !data_cstr_ok(data, h->data_bytes, (uint32_t)in->imm)) return CELL_EXEC_BAD_DATA;
+			if (!reg_ok(in->dst) || !reg_ok(in->a) || in->imm < 0 || !data_cstr_ok(data, h->data_bytes, (uint32_t)in->imm)) return CELL_EXEC_BAD_DATA;
 			break;
 		case CELL_EXEC_OP_SYSCALL: {
 			uint32_t packed = (uint32_t)in->imm;
@@ -181,14 +176,26 @@ cell_exec_status_t cell_exec_open(cell_exec_t *exec, const void *blob, size_t by
 			if (argc >= 2u && !reg_ok(in->b)) return CELL_EXEC_BAD_REGISTER;
 			break;
 		}
+		case CELL_EXEC_OP_CALLN: {
+			uint8_t argc = CELL_EXEC_CALL_ARGC(in->imm);
+			uint32_t target = CELL_EXEC_CALL_TARGET(in->imm);
+			if (!reg_ok(in->dst) || argc > 8u || target >= count) return CELL_EXEC_BAD_BRANCH;
+			if (argc && !reg_ok(in->a)) return CELL_EXEC_BAD_REGISTER;
+			break;
+		}
 		case CELL_EXEC_OP_RET:
 			if (!reg_ok(in->a)) return CELL_EXEC_BAD_REGISTER;
+			break;
+		case CELL_EXEC_OP_FRAME:
+			if (in->imm < 0 || (uint32_t)in->imm > h->memory_bytes) return CELL_EXEC_BAD_MEMORY;
+			break;
+		case CELL_EXEC_OP_ADDRL:
+			if (!reg_ok(in->dst) || in->imm < 0) return CELL_EXEC_BAD_REGISTER;
 			break;
 		default:
 			return CELL_EXEC_BAD_OPCODE;
 		}
 	}
-
 	exec->h = h;
 	exec->code = code;
 	exec->data = data;

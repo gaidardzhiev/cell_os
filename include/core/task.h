@@ -6,7 +6,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "core/cellexec.h"
-
 #define CELL_TASK_HISTORY 8u
 #define CELL_TASK_PATH_MAX 128u
 #define CELL_TASK_OUTPUT_MAX 768u
@@ -27,7 +26,6 @@ typedef enum {
 	CELL_TASK_EXITED,
 	CELL_TASK_FAULTED
 } cell_task_state_t;
-
 typedef enum {
 	CELL_TASK_FAULT_NONE = 0,
 	CELL_TASK_FAULT_LOAD,
@@ -51,19 +49,19 @@ typedef struct {
 	uint32_t offset;
 	char path[CELL_TASK_PATH_MAX];
 } cell_task_fd_t;
-
 typedef struct {
 	uint32_t offset;
 	uint32_t size;
 	uint8_t used;
 } cell_task_heap_block_t;
-
 typedef struct {
 	uint32_t return_pc;
 	uint8_t dst;
+	uint32_t stack_top;
+	uint32_t frame_base;
+	uint32_t frame_size;
 	uint64_t regs[CELL_EXEC_REGS];
 } cell_task_call_frame_t;
-
 typedef struct {
 	uint32_t id;
 	cell_task_state_t state;
@@ -75,7 +73,6 @@ typedef struct {
 	uint64_t granted_caps;
 	char path[CELL_TASK_PATH_MAX];
 } cell_task_record_t;
-
 typedef struct cell_task_manager {
 	uint32_t next_id;
 	uint32_t next_slot;
@@ -89,9 +86,13 @@ typedef struct cell_task_manager {
 	cell_task_call_frame_t calls[CELL_TASK_CALL_DEPTH];
 	uint32_t heap_next;
 	uint32_t call_depth;
+	uint32_t static_base;
+	uint32_t stack_top;
+	uint32_t frame_base;
+	uint32_t frame_size;
+	uint8_t compiler_service_allowed;
 	int32_t errno_value;
 } cell_task_manager_t;
-
 void cell_task_manager_init(cell_task_manager_t *tm, uint64_t policy_mask);
 const char *cell_task_state_name(cell_task_state_t state);
 const char *cell_task_fault_name(cell_task_fault_t fault);
