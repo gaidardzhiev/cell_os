@@ -232,6 +232,7 @@ static void reset_process_state(cell_task_manager_t *tm) {
 	tm->frame_base = 0u;
 	tm->frame_size = 0u;
 	tm->compiler_service_allowed = 0u;
+	tm->exec_install_allowed = 0u;
 	tm->errno_value = 0;
 	tm->fds[CELL_STDIN_FILENO].used = 1u;
 	tm->fds[CELL_STDIN_FILENO].readable = 1u;
@@ -563,6 +564,41 @@ static int64_t sys_compile(cell_task_manager_t *tm, cell_vfs_t *vfs,
 	return 0;
 }
 
+static int64_t sys_install_exec(cell_task_manager_t *tm, cell_vfs_t *vfs,
+	const cell_capability_env_t *env, const cell_exec_t *exec,
+	uint64_t input_addr, uint64_t output_addr) {
+	char input[CELL_VFS_PATH_MAX], output[CELL_VFS_PATH_MAX];
+	char input_abs[CELL_VFS_PATH_MAX], output_abs[CELL_VFS_PATH_MAX];
+	if (!tm->exec_install_allowed) return syscall_fail(tm, CELL_EACCES);
+	if (!copy_pointer_cstr(exec, tm->memory, input_addr, input, sizeof(input)) ||
+	    !copy_pointer_cstr(exec, tm->memory, output_addr, output, sizeof(output)))
+		return syscall_fail(tm, CELL_EFAULT);
+	if (!cell_vfs_normalize(vfs, input, input_abs) || !cell_vfs_normalize(vfs, output, output_abs))
+		return syscall_fail(tm, CELL_EINVAL);
+	if (!str_starts_task(input_abs, "/home/") || !str_starts_task(output_abs, "/programs/"))
+		return syscall_fail(tm, CELL_EACCES);
+	size_t image_bytes = 0;
+	cell_vfs_status_t vs = cell_vfs_read_bytes(vfs, input_abs, compile_image, sizeof(compile_image), &image_bytes);
+	if (vs != CELL_VFS_OK) return syscall_fail(tm, vfs_errno(vs));
+	if (image_bytes < CELL_EXEC_HEADER_BYTES) return syscall_fail(tm, CELL_EINVAL);
+	cell_exec_header_t *h = (cell_exec_header_t *)compile_image;
+	if (h->header_bytes != CELL_EXEC_HEADER_BYTES || h->total_bytes != image_bytes ||
+	    h->code_bytes > image_bytes - CELL_EXEC_HEADER_BYTES ||
+	    h->data_bytes > image_bytes - CELL_EXEC_HEADER_BYTES - h->code_bytes)
+		return syscall_fail(tm, CELL_EINVAL);
+	if ((size_t)h->code_bytes + (size_t)h->data_bytes != image_bytes - CELL_EXEC_HEADER_BYTES)
+		return syscall_fail(tm, CELL_EINVAL);
+	h->payload_crc32 = cell_exec_crc32(compile_image + CELL_EXEC_HEADER_BYTES,
+		image_bytes - CELL_EXEC_HEADER_BYTES);
+	cell_exec_t candidate;
+	if (cell_exec_open(&candidate, compile_image, image_bytes, all_known_caps()) != CELL_EXEC_OK)
+		return syscall_fail(tm, CELL_EINVAL);
+	vs = cell_vfs_write_bytes(vfs, output_abs, compile_image, image_bytes, 0);
+	if (vs != CELL_VFS_OK) return syscall_fail(tm, vfs_errno(vs));
+	(void)env;
+	return 0;
+}
+
 static int64_t execute_syscall(cell_task_manager_t *tm, cell_vfs_t *vfs,
 	const cell_capability_env_t *env, const cell_exec_t *exec, outbuf_t *out,
 	uint8_t nr, uint64_t a0, uint64_t a1, uint64_t a2) {
@@ -576,6 +612,7 @@ static int64_t execute_syscall(cell_task_manager_t *tm, cell_vfs_t *vfs,
 	case CELL_EXEC_SYS_MALLOC: return sys_malloc(tm, exec, a0);
 	case CELL_EXEC_SYS_FREE: return sys_free(tm, a0);
 	case CELL_EXEC_SYS_COMPILE: return sys_compile(tm, vfs, env, exec, out, a0, a1);
+	case CELL_EXEC_SYS_INSTALL_EXEC: return sys_install_exec(tm, vfs, env, exec, a0, a1);
 	default: return syscall_fail(tm, CELL_EINVAL);
 	}
 }
@@ -627,6 +664,7 @@ static int run_impl(cell_task_manager_t *tm, cell_vfs_t *vfs,
 	tm->stack_top = tm->static_base;
 	tm->frame_base = tm->static_base;
 	tm->compiler_service_allowed = str_eq_task(absolute, "/programs/cc");
+	tm->exec_install_allowed = str_eq_task(absolute, "/programs/cc.stage1");
 	if (!prepare_argv(tm, &exec, argc, argv)) {
 		fault(r, CELL_TASK_FAULT_ARGUMENT);
 		ob_str(&b, absolute); ob_str(&b, ": Argument list too large.");

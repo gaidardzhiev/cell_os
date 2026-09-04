@@ -5,7 +5,7 @@
 #include "core/cellexec.h"
 
 static int reg_ok(uint8_t r) { return r < CELL_EXEC_REGS; }
-static int syscall_ok(uint8_t nr) { return nr >= CELL_EXEC_SYS_OPEN && nr <= CELL_EXEC_SYS_COMPILE; }
+static int syscall_ok(uint8_t nr) { return nr >= CELL_EXEC_SYS_OPEN && nr <= CELL_EXEC_SYS_INSTALL_EXEC; }
 static unsigned syscall_argc(uint8_t nr) {
 	switch (nr) {
 	case CELL_EXEC_SYS_ERRNO: return 0u;
@@ -13,7 +13,8 @@ static unsigned syscall_argc(uint8_t nr) {
 	case CELL_EXEC_SYS_MALLOC:
 	case CELL_EXEC_SYS_FREE: return 1u;
 	case CELL_EXEC_SYS_OPEN:
-	case CELL_EXEC_SYS_COMPILE: return 2u;
+	case CELL_EXEC_SYS_COMPILE:
+	case CELL_EXEC_SYS_INSTALL_EXEC: return 2u;
 	case CELL_EXEC_SYS_READ:
 	case CELL_EXEC_SYS_WRITE:
 	case CELL_EXEC_SYS_LSEEK: return 3u;

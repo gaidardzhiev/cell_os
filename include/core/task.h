@@ -91,6 +91,7 @@ typedef struct cell_task_manager {
 	uint32_t frame_base;
 	uint32_t frame_size;
 	uint8_t compiler_service_allowed;
+	uint8_t exec_install_allowed;
 	int32_t errno_value;
 } cell_task_manager_t;
 void cell_task_manager_init(cell_task_manager_t *tm, uint64_t policy_mask);

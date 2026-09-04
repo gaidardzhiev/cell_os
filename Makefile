@@ -15,7 +15,7 @@ STAGE2_BIN := $(BUILD_DIR)/stage2.bin
 KERNEL_ELF := $(BUILD_DIR)/kernel.elf
 KERNEL_BIN := $(BUILD_DIR)/kernel.bin
 HOST_TEST := $(BUILD_DIR)/test_cortex_host
-CELL_PROGRAM_SOURCES := programs/hello.c programs/observe.c programs/args.c programs/sysview.c programs/cc.c
+CELL_PROGRAM_SOURCES := programs/hello.c programs/observe.c programs/args.c programs/sysview.c programs/cc.c programs/cc.stage1.c
 CELL_PROGRAM_IMAGES := $(patsubst programs/%.c,$(BUILD_DIR)/programs/%.cellx,$(CELL_PROGRAM_SOURCES))
 HOST_CC := $(BUILD_DIR)/cc
 
@@ -43,7 +43,7 @@ KERNEL_SRCS := \
 KERNEL_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(KERNEL_SRCS))
 KERNEL_ENTRY_OBJ := $(BUILD_DIR)/src/kernel/kernel_entry.o
 
-.PHONY: all clean reset-cellfs cortex-model cell-programs install-cell-programs test-cortex-host test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-cc test-c-runtime test-c-system test-shell test-exec-tools test-program-image test-cortex-session test-compiler-process test-bootloader-staging test-caploop cortex-x86 run-cortex-x86 check-tools
+.PHONY: all clean reset-cellfs cortex-model cell-programs install-cell-programs test-cortex-host test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-cc test-c-runtime test-c-system test-shell test-exec-tools test-program-image test-cortex-session test-compiler-process test-compiler-bootstrap test-bootloader-staging test-caploop cortex-x86 run-cortex-x86 check-tools
 all: cortex-x86
 
 check-tools:
@@ -244,6 +244,14 @@ $(BUILD_DIR)/test_compiler_process: src/core/cc.c src/core/cellexec.c tests/test
 test-compiler-process: $(BUILD_DIR)/test_compiler_process
 	@$(BUILD_DIR)/test_compiler_process programs/cc.c
 
+$(BUILD_DIR)/test_compiler_bootstrap: src/core/cc.c src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_compiler_bootstrap.c include/core/cc.h include/core/cellexec.h include/core/task.h include/core/vfs.h include/core/cellfs.h include/core/capability.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=c11 -O2 -Wall -Wextra -Werror -Iinclude \
+		src/core/cc.c src/core/cellexec.c src/core/task.c src/core/cellfs.c src/core/vfs.c src/core/capability.c tests/test_compiler_bootstrap.c -o $@
+
+test-compiler-bootstrap: $(BUILD_DIR)/test_compiler_bootstrap
+	@$(BUILD_DIR)/test_compiler_bootstrap programs/cc.stage1.c
+
 test-bootloader-staging:
 	@python3 tests/test_bootloader_staging.py
 
@@ -256,7 +264,7 @@ $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN) $(CORTEX_MODEL) $(CELLFS_
 	@mkdir -p $(BUILD_DIR)
 	python3 scripts/pack_disk.py $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN) $@ --model $(CORTEX_MODEL) --cellfs $(CELLFS_IMAGE)
 
-test-caploop: test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-cc test-c-runtime test-c-system test-shell test-exec-tools test-program-image test-cortex-host test-cortex-session test-compiler-process test-bootloader-staging
+test-caploop: test-capability test-cellfs test-cellfs-image test-cellfs-tools test-vfs test-cellexec test-task test-cc test-c-runtime test-c-system test-shell test-exec-tools test-program-image test-cortex-host test-cortex-session test-compiler-process test-compiler-bootstrap test-bootloader-staging
 
 cortex-x86: check-tools test-caploop $(DISK_IMG)
 	@echo '#CORTEX x86 image ready:' $(DISK_IMG)

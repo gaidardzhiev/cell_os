@@ -990,6 +990,7 @@ static int sys_builtin_nr_name(const char *name) {
 	if (s_eq(name, "malloc")) return CELL_EXEC_SYS_MALLOC;
 	if (s_eq(name, "free")) return CELL_EXEC_SYS_FREE;
 	if (s_eq(name, "compile")) return CELL_EXEC_SYS_COMPILE;
+	if (s_eq(name, "install_exec")) return CELL_EXEC_SYS_INSTALL_EXEC;
 	return 0;
 }
 static int pointer_to_char(ctype_t t) { return t.pointers == 1u && (t.base == BT_CHAR || t.base == BT_VOID);
@@ -1001,7 +1002,7 @@ static int parse_sys_call(compiler_t *c, const char *name, expr_t *out) {
 	expr_t args[3];
 	zero_bytes(args, sizeof(args));
 	unsigned argc = nr == CELL_EXEC_SYS_CLOSE || nr == CELL_EXEC_SYS_MALLOC || nr == CELL_EXEC_SYS_FREE ? 1u :
-		(nr == CELL_EXEC_SYS_OPEN || nr == CELL_EXEC_SYS_COMPILE ? 2u : 3u);
+		(nr == CELL_EXEC_SYS_OPEN || nr == CELL_EXEC_SYS_COMPILE || nr == CELL_EXEC_SYS_INSTALL_EXEC ? 2u : 3u);
 	for (unsigned i = 0; i < argc; ++i) {
 		if (i && !expect(c, ',', "expected ',' in system function")) return 0;
 		if (!parse_assignment(c, &args[i]) || !expr_rvalue(c, &args[i])) return 0;
@@ -1009,6 +1010,7 @@ static int parse_sys_call(compiler_t *c, const char *name, expr_t *out) {
 	if (!expect(c, ')', "expected ')' after system function")) return 0;
 	if (nr == CELL_EXEC_SYS_OPEN && (!pointer_to_char(args[0].type) || !type_is_integer(args[1].type))) return fail_at(c, CELL_CC_PARSE_ERROR, "open requires char pointer and integer flags");
 	if (nr == CELL_EXEC_SYS_COMPILE && (!pointer_to_char(args[0].type) || !pointer_to_char(args[1].type))) return fail_at(c, CELL_CC_PARSE_ERROR, "compile requires source and output path pointers");
+	if (nr == CELL_EXEC_SYS_INSTALL_EXEC && (!pointer_to_char(args[0].type) || !pointer_to_char(args[1].type))) return fail_at(c, CELL_CC_PARSE_ERROR, "install_exec requires input and output path pointers");
 	if (nr == CELL_EXEC_SYS_CLOSE && !type_is_integer(args[0].type)) return fail_at(c, CELL_CC_PARSE_ERROR, "close requires integer file descriptor");
 	if ((nr == CELL_EXEC_SYS_READ || nr == CELL_EXEC_SYS_WRITE) && (!type_is_integer(args[0].type) || !type_is_pointer(args[1].type) || !type_is_integer(args[2].type))) return fail_at(c, CELL_CC_PARSE_ERROR, "read/write require fd, pointer, and integer count");
 	if (nr == CELL_EXEC_SYS_LSEEK && (!type_is_integer(args[0].type) || !type_is_integer(args[1].type) || !type_is_integer(args[2].type))) return fail_at(c, CELL_CC_PARSE_ERROR, "lseek requires integer fd, offset, and whence");

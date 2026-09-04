@@ -304,18 +304,19 @@ The original Cell OS subsystems remain in place. The Cortex work extends the tre
 - `src/core/mem_arena.c`: bounded memory arena used by Cortex and other native allocations.
 - `src/core/cellfs.c` and `src/core/vfs.c`: persistent CellFS-1 storage plus the unified live/persistent namespace, including Cell-native `/proc`, `/dev`, and `/sys` projections.
 - `src/core/cellexec.c` and `src/core/task.c`: CellExec-1 verifier plus synchronous bounded task execution, file descriptors, syscall dispatch, errno, bounded allocation, and the bounded function call stack.
-- `src/core/cc.c` and `include/core/cc.h`: bootstrap C parser/code generator used by host `cc` and exposed in the target through the bounded compile service.
-- `tools/cc.c`: host command-line frontend for the same bootstrap C compiler.
+- `src/core/cc.c` and `include/core/cc.h`: compatibility bootstrap C parser/code generator used by host `cc` and retained in the target behind the bounded compile service.
+- `programs/cc.stage1.c`: first user-space bootstrap compiler implementation, performing its own source recognition and CellExec emission without the trusted compile syscall.
+- `tools/cc.c`: host command-line frontend for the compatibility bootstrap C compiler.
 - `sdk/include/`: initial C-facing SDK declarations for standard output, strings, integer conversion, file descriptors, file I/O, errno, bounded allocation, and explicit Cell capabilities.
 - `src/core/shell.c`: deliberately small POSIX-shell-compatible command surface, quoting/redirection parser, `/programs` lookup, compiler-process dispatch, recovery compiler fallback, and `ps` interface.
-- `programs/`: C programs including `hello`, `observe`, `args`, `sysview`, and the target-facing `cc` wrapper, compiled into CellExec-1 and installed persistently into `/programs`.
+- `programs/`: C programs including `hello`, `observe`, `args`, `sysview`, the target-facing `cc` wrapper, and `cc.stage1`, compiled into CellExec-1 and installed persistently into `/programs`.
 - `src/drivers/x86/ata_pio.c`: current x86 ATA PIO path used to load the model payload.
 - `src/cortex/cwm.c`: CWM1 parser and model validation.
 - `src/cortex/cortex.c`: native causal transformer inference implementation.
 - `src/kernel/cortex_boot.c`: Cortex model loading and interactive execution path.
 - `tools/celllm_train.py`: CellLM-1M PyTorch training and CWM1 export tool.
 - `tests/test_cortex_host.c`: native host-side CWM1/Cortex inference test.
-- `tests/test_cellexec.c`, `tests/test_task.c`, `tests/test_c_runtime.c`, `tests/test_c_system.c`, and `tests/test_program_image.c`: executable ABI, task policy, process ABI, C runtime, descriptor/system interface, synthetic namespace, gas/memory, and persistent-program execution tests.
+- `tests/test_cellexec.c`, `tests/test_task.c`, `tests/test_c_runtime.c`, `tests/test_c_system.c`, `tests/test_program_image.c`, and `tests/test_compiler_bootstrap.c`: executable ABI, task policy, process ABI, C runtime, descriptor/system interface, synthetic namespace, gas/memory, persistent-program execution, and user-space compiler bootstrap tests.
 - `models/`: exported CWM checkpoints and model metadata.
 - `data/`: current CellLM training corpus.
 - `checkpoints/`: development training checkpoints where retained intentionally.
@@ -472,7 +473,7 @@ The Cortex capability loop adds a deterministic regression target before image c
 make test-caploop CORTEX_MODEL=models/celllm_1m.cwm
 ```
 
-`test-capability` verifies exact call parsing, rejection of unknown names, E820/memory result serialization, CPU result structure, system status, and deterministic rendering. `test-cellfs`/`test-vfs` verify persistent remount, namespace semantics, live capability nodes, the binary/text boundary, descriptor range I/O, dynamic `/proc` process projections, `/dev` node semantics, and `/sys` hardware projections. `test-cellexec` validates the executable ABI and static verifier. `test-task` exercises lifecycle, gas exhaustion, task-local memory, capability policy, the `/programs` execution boundary, and the restricted compiler-service syscall path. `test-cc` verifies the supported C parser/code generator, CellExec validation, capability inference, unsupported-surface rejection, and the current `argc/argv` and pointer/runtime subset. `test-c-runtime` verifies the process ABI, character-pointer and argument indexing, `puts`/`putchar`/`strlen`/`strcmp`/`atoi`, arithmetic comparisons, and expression returns. `test-c-system` verifies file descriptors, `open`/`close`/`read`/`write`/`lseek`, standard descriptors, `errno`, bounded allocation, writable namespace policy, user-defined functions, bounded recursion, pointer-indexed byte stores, C access to `/proc/self`, C reads from `/sys`, and `/dev/null`, `/dev/zero`, and `/dev/console` semantics. `test-shell` verifies Unix/POSIX command names, quoting, `>`/`>>` redirection, `/programs` lookup, target-side `cc`, persistent compiled programs, process argument forwarding, target-compiled descriptor I/O, `ps`, and absence of the earlier proof command vocabulary. `test-program-image` executes compiled programs after installation into persistent CellFS, including the `sysview` system-inspection proof and the installed compiler wrapper. `test-cortex-session` drives the same shell, VFS, synthetic namespaces, process/task, compiler, and learned capability-routing paths used by the bare-metal interactive session. The regression graph also checks the compiler process boundary and the chunked BIOS kernel loader.
+`test-capability` verifies exact call parsing, rejection of unknown names, E820/memory result serialization, CPU result structure, system status, and deterministic rendering. `test-cellfs`/`test-vfs` verify persistent remount, namespace semantics, live capability nodes, the binary/text boundary, descriptor range I/O, dynamic `/proc` process projections, `/dev` node semantics, and `/sys` hardware projections. `test-cellexec` validates the executable ABI and static verifier. `test-task` exercises lifecycle, gas exhaustion, task-local memory, capability policy, the `/programs` execution boundary, and the restricted compiler-service syscall path. `test-cc` verifies the supported C parser/code generator, CellExec validation, capability inference, unsupported-surface rejection, and the current `argc/argv` and pointer/runtime subset. `test-c-runtime` verifies the process ABI, character-pointer and argument indexing, `puts`/`putchar`/`strlen`/`strcmp`/`atoi`, arithmetic comparisons, and expression returns. `test-c-system` verifies file descriptors, `open`/`close`/`read`/`write`/`lseek`, standard descriptors, `errno`, bounded allocation, writable namespace policy, user-defined functions, bounded recursion, pointer-indexed byte stores, C access to `/proc/self`, C reads from `/sys`, and `/dev/null`, `/dev/zero`, and `/dev/console` semantics. `test-shell` verifies Unix/POSIX command names, quoting, `>`/`>>` redirection, `/programs` lookup, target-side `cc`, persistent compiled programs, process argument forwarding, target-compiled descriptor I/O, `ps`, and absence of the earlier proof command vocabulary. `test-program-image` executes compiled programs after installation into persistent CellFS, including the `sysview` system-inspection proof and the installed compiler wrapper. `test-cortex-session` drives the same shell, VFS, synthetic namespaces, process/task, compiler, and learned capability-routing paths used by the bare-metal interactive session. `test-compiler-process` checks the installed compiler wrapper boundary. `test-compiler-bootstrap` compiles `/programs/cc.stage1`, proves that its CellExec image contains no trusted `compile` syscall, runs it against C source in CellFS, verifies and executes the generated program, and checks that an unrelated task cannot delegate the executable-install boundary. `test-bootloader-staging` checks the chunked BIOS kernel loader.
 
 The Cortex work also retains three model/runtime validation boundaries.
 
@@ -550,6 +551,8 @@ The repository currently establishes the following Cortex and native-programming
 - a synchronous task lifecycle/history layer with explicit task capability policy and execution restricted to `/programs`;
 - a bootstrap C compiler core used by the development host and exposed in the target only through a bounded compile service;
 - an installed `/programs/cc` CellExec process used as the normal target-facing compiler command;
+- an initial `/programs/cc.stage1` user-space bootstrap compiler whose source parsing and CellExec emission execute inside a verified task rather than through the trusted compile syscall;
+- a restricted `install_exec` boundary available only to `/programs/cc.stage1`, accepting candidate images under `/home`, finalizing their CRC, verifying them, and installing accepted executables under `/programs`;
 - target-side C source compilation directly inside the running Cell OS reference system;
 - persistent installation of compiler output into `/programs` and later execution through the normal task verifier;
 - a compiler-service policy that accepts source under `/home`, emits programs under `/programs`, and does not grant ordinary tasks general executable-namespace write access;
@@ -670,19 +673,57 @@ bounded compile service
 A validated bare-metal session shows the compiler and its output as separate task records:
 
 ```text
-cell$ cc /home/p7.c -o /programs/p7
-cell$ p7
+cell$ cc /home/process-compiler.c -o /programs/process-proof
+cell$ process-proof
 Compiler process boundary works.
 
 cell$ ps
 PID STATE EXIT GAS COMMAND
 1 exited 0 129 /programs/cc
-2 exited 0 8 /programs/p7
+2 exited 0 8 /programs/process-proof
 ```
 
 The task history demonstrates that the compiler command and the program it creates execute as separate CellExec tasks.
 
 The low-level `tools/cellasm.py` assembler remains a bootstrap, debugging, and backend-development tool. It is not the intended user programming language. The source-level direction is C, and the scripting direction is POSIX shell.
+
+## User-Space Compiler Bootstrap
+
+The first compiler implementation code now also exists on the far side of the CellExec process boundary. `programs/cc.stage1.c` is compiled into `/programs/cc.stage1` and runs as an ordinary verified CellExec task. Unlike the normal `/programs/cc` compatibility wrapper, this bootstrap compiler does not invoke the trusted `compile` syscall. It reads C source through ordinary file descriptors, recognizes its current bootstrap language directly in user space, emits CellExec instructions and data into a candidate executable image, and writes that candidate under `/home`.
+
+The trusted target retains one deliberately narrower operation, `install_exec`. That service is available only when the executing path is exactly `/programs/cc.stage1`. It accepts a candidate image only from `/home`, recomputes the CellExec payload CRC, submits the image to the normal CellExec verifier, and writes the image under `/programs` only after successful verification. An unrelated task receives `EACCES`. The service therefore owns executable admission, not C parsing or code generation.
+
+The current stage1 compiler is intentionally small. Its accepted input is limited to a `main` body containing string-literal `puts`, integer `putchar`, and integer `return` statements, with comments and preprocessor lines skipped. This surface is enough to establish that C-to-CellExec code generation itself can execute in user space without pretending that the full bootstrap compiler has already crossed the boundary.
+
+The current bounded configuration gives CellExec tasks up to 16 KiB of memory and raises the bootstrap compiler code-generation ceiling to 1,900 instructions while retaining the 16 KiB CellExec and CellFS file-size limit. The current bootstrap build produces a 14,948-byte `cc.stage1` image with 1,844 CellExec instructions. It contains no `CELL_EXEC_SYS_COMPILE` instruction and one `CELL_EXEC_SYS_INSTALL_EXEC` boundary call.
+
+The intended proof path is now concrete:
+
+```text
+C source in /home
+        |
+        v
+/programs/cc.stage1
+  CellExec task
+        |
+        v
+user-space parse + CellExec emission
+        |
+        v
+candidate image in /home
+        |
+        v
+install_exec
+ CRC + verifier only
+        |
+        v
+/programs executable
+        |
+        v
+normal CellExec task execution
+```
+
+This is not self-hosting yet. The stage1 implementation is written in a broader subset than stage1 itself currently accepts, so it cannot yet compile its own source. The next compiler work is therefore demand-driven: move enough lexical, expression, declaration, function, pointer, and data-layout support into the user-space compiler for `cc.stage1` to reproduce the next compiler stage. The trusted `/programs/cc` path remains available while that migration proceeds.
 
 ## C Process Runtime and Real Program Arguments
 
@@ -872,7 +913,7 @@ A human can boot Cell OS, create a C source file, invoke `cc` from the Cell OS p
 
 There is deliberately no Linux userspace underneath this path. The target does not call GCC, Clang, Python, PyTorch, llama.cpp, GGML, or a host libc to compile and execute the program after boot. The compiler frontend, VFS, persistent filesystem, executable verifier, task runtime, capability dispatcher, transformer inference engine, and shell integration are Cell OS components.
 
-The next major boundary is self-hosting. The normal `cc` command already runs as `/programs/cc`, an ordinary CellExec task, but the compiler implementation invoked by that wrapper still resides in trusted target code. The project now has a concrete route toward moving that implementation across the process boundary and allowing a compiler stage to reproduce itself.
+The next major boundary is self-hosting. The normal `cc` command already runs as `/programs/cc`, and the first independent compiler backend now runs as `/programs/cc.stage1`, where source recognition and CellExec emission happen inside an ordinary CellExec task. The remaining work is to expand that user-space compiler until it can compile its own implementation and reproduce a subsequent stage without relying on the trusted compile service.
 
 ## What Is Not Yet Demonstrated
 
@@ -891,8 +932,8 @@ The current work remains deliberately narrower than the long-term architecture.
 - `stdin` currently has EOF-only semantics; interactive task input and blocking descriptor I/O are not implemented yet.
 - The current allocator is a bounded task-local allocator with eight tracked blocks, not a general heap with coalescing or virtual memory.
 - File writes from ordinary compiled tasks are currently restricted to `/home`; a broader permissions and executable-installation model is future work.
-- The normal target `cc` command runs as `/programs/cc`, but the compiler implementation behind its bounded compile service still resides in trusted target code.
-- The compiler does not yet compile its own source inside Cell OS, so the system is not self-hosting.
+- The normal target `cc` command still uses the trusted compiler core through its bounded compatibility service; `/programs/cc.stage1` demonstrates independent user-space code generation but currently accepts only a deliberately small bootstrap subset.
+- The user-space compiler does not yet compile its own source inside Cell OS, so the system is not self-hosting.
 - `/proc`, `/dev`, and `/sys` are intentionally compact Cell-native projections rather than Linux ABI replicas. There is no `opendir`/`readdir` C API yet, no symlink model, and no claim that Linux software can consume these trees unchanged.
 - `/proc` currently exposes the active task and retained task-history records rather than a preemptive concurrent process universe.
 - `/dev/console` has output semantics for compiled tasks, while descriptor-based interactive input remains unimplemented.
@@ -928,7 +969,7 @@ The rule is demand-driven growth. Features should be added because Cell OS progr
 
 ### Compiler Bootstrap Inside Cell OS
 
-The command/process boundary is already established: the normal target `cc` command is `/programs/cc`. The remaining bootstrap work is to move the compiler implementation itself out of trusted target code and into a compiler executable capable of reproducing the next stage:
+The command/process boundary is established and the first user-space code-generation stage now exists as `/programs/cc.stage1`. It reads source through the normal descriptor interface and emits CellExec candidates without invoking the trusted compile syscall. The next bootstrap work is to expand that implementation until it can consume its own source and reproduce the next stage:
 
 ```text
 host/bootstrap compiler
@@ -943,7 +984,7 @@ cc.stage1 running inside Cell OS
 /programs/cc.stage2
 ```
 
-At that point the compiler implementation source itself must be expressible in the C subset supported by Cell OS. The bounded compile service can then be reduced or removed as the executable compiler becomes self-sufficient.
+The executable-admission boundary can remain small and trusted: finalize CRC, verify the candidate image, and install it. C parsing, semantic processing, and code generation should continue migrating into the compiler task. Once `cc.stage1` can build `cc.stage2`, the compatibility compile service behind `/programs/cc` can be reduced or removed.
 
 ### Self-Hosting Proof
 
