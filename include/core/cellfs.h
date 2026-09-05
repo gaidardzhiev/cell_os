@@ -2,11 +2,9 @@
  * Copyright (c) 2025 Mihail Banov and Ivan Gaydardzhiev
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
-
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
-
 #define CELLFS_MAGIC 0x31534643u /* CFS1 */
 #define CELLFS_VERSION 1u
 #define CELLFS_SECTOR_SIZE 512u
@@ -15,8 +13,7 @@
 #define CELLFS_INODE_TABLE_SECTORS ((CELLFS_MAX_INODES * CELLFS_INODE_BYTES) / CELLFS_SECTOR_SIZE)
 #define CELLFS_DATA_LBA (1u + CELLFS_INODE_TABLE_SECTORS)
 #define CELLFS_NAME_MAX 63u
-#define CELLFS_FILE_MAX (16u * 1024u)
-
+#define CELLFS_FILE_MAX (128u * 1024u)
 #define CELLFS_TYPE_FREE 0u
 #define CELLFS_TYPE_DIR  1u
 #define CELLFS_TYPE_FILE 2u
@@ -31,7 +28,6 @@ typedef struct {
 	uint64_t base_lba;
 	uint32_t total_sectors;
 } cellfs_disk_t;
-
 typedef struct __attribute__((packed)) {
 	uint32_t magic;
 	uint16_t version;
@@ -49,7 +45,6 @@ typedef struct __attribute__((packed)) {
 	uint32_t crc32;
 	uint8_t reserved[460];
 } cellfs_super_t;
-
 typedef struct __attribute__((packed)) {
 	uint32_t id;
 	uint32_t parent;
@@ -72,10 +67,8 @@ typedef struct {
 	uint8_t scratch[CELLFS_FILE_MAX];
 	int mounted;
 } cellfs_t;
-
 _Static_assert(sizeof(cellfs_super_t) == CELLFS_SECTOR_SIZE, "CellFS superblock ABI");
 _Static_assert(sizeof(cellfs_inode_t) == CELLFS_INODE_BYTES, "CellFS inode ABI");
-
 uint32_t cellfs_crc32(const void *data, size_t bytes);
 int cellfs_mount(cellfs_t *fs, const cellfs_disk_t *disk);
 int cellfs_format(cellfs_t *fs, const cellfs_disk_t *disk);

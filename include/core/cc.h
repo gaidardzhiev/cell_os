@@ -5,12 +5,12 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
-#define CELL_CC_SOURCE_MAX 8192u
+#define CELL_CC_SOURCE_MAX (32u * 1024u)
 #define CELL_CC_UNIT_MAX 8u
-#define CELL_CC_MAX_CODE 1900u
+#define CELL_CC_MAX_CODE 16000u
 #define CELL_CC_MAX_DATA 8192u
 #define CELL_CC_DIAG_MAX 192u
-#define CELL_CC_TASK_MEMORY (16u * 1024u)
+#define CELL_CC_TASK_MEMORY (256u * 1024u)
 #define CELL_CC_STATIC_MEMORY 1024u
 
 typedef enum {

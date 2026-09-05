@@ -13,7 +13,7 @@ The current work should therefore be understood as two interacting layers:
 
 The long-term objective is not to place an unrestricted language model in the hardware control path. It is to investigate whether a compact learned system can serve as a semantic interface to a small, explicit, and verifiable machine substrate.
 
-Cell OS has now crossed an important implementation boundary. The running x86_64 reference system can accept C source from its own persistent filesystem, compile that source with the native `cc` command, emit a verified CellExec-1 program into `/programs`, pass real `argc/argv` process input, execute the result as a bounded task, retain its exit status and gas usage, and execute the persisted program again on later runs. The same system simultaneously hosts the CellLM-1M inference path, deterministic capability mediation, CellFS storage, VFS namespaces, and the CellExec verifier. This is not yet a self-hosting C system, but it is already a complete source-to-execution programming loop inside Cell OS itself.
+Cell OS has now crossed an important implementation boundary. The running x86_64 reference system can accept C source from its own persistent filesystem, compile that source into verified CellExec-1 programs, execute the result as bounded tasks, retain process history, and persist the executables in CellFS. The same system also contains a self-hosting bootstrap compiler: `cc.stage1` compiles its own source into `cc.stage2`, `cc.stage2` compiles the same source into a stage3 candidate, and after the normal CRC and verifier admission boundary the installed `cc.stage2` and `cc.stage3` images are byte-identical. This establishes deterministic self-reproduction for the bootstrap compiler while remaining deliberately narrower than a complete ISO C toolchain.
 
 ## Design Goals
 
@@ -180,7 +180,7 @@ The current shell lexer supports ordinary words, backslash quoting, single and d
 
 These exact shell operations bypass language-model inference. Natural-language requests that CellLM-1M already knows, such as directory listing and working-directory queries, route through `storage.list_dir` and `storage.pwd` onto the same VFS state. There is no separate AI filesystem. Shell command recognition takes precedence over CellLM inference, while unrecognized natural-language input falls through to Cortex.
 
-CellFS-1 uses a deliberately small on-disk ABI: a 512-byte CRC-protected superblock, 64 fixed-size CRC-protected inode records, a parent/name directory namespace, and an append-only data allocator. The current maximum file size is 16 KiB. The writable CellFS image is kept independently from build scratch state, so `make clean` does not destroy persistent files. The QEMU run path synchronizes the writable CellFS tail back to `state/cellfs.img` after the reference machine exits.
+CellFS-1 uses a deliberately small on-disk ABI: a 512-byte CRC-protected superblock, 64 fixed-size CRC-protected inode records, a parent/name directory namespace, and an append-only data allocator. The current maximum file size is 128 KiB. The writable CellFS image is kept independently from build scratch state, so `make clean` does not destroy persistent files. The QEMU run path synchronizes the writable CellFS tail back to `state/cellfs.img` after the reference machine exits.
 
 CellFS-1 is not presented as a mature general-purpose filesystem. It currently has no free-space reclamation, journal, transactional update protocol, permissions, links, sparse files, or large-file extent tree. Those are explicit later concerns. Corrupt structural metadata and CRC failures are rejected during mount rather than accepted silently.
 
@@ -201,7 +201,7 @@ The current verifier rejects at least:
 - constant-data references outside the data section;
 - unknown capability bits;
 - capability instructions not explicitly declared by the executable;
-- task-memory requests above 4096 bytes;
+- task-memory requests above 256 KiB;
 - zero or excessive gas budgets.
 
 The instruction set remains intentionally small but now supports the process and C-runtime work required by the current programming milestones. In addition to halt, register/immediate moves, arithmetic, branches, constant output, explicit capability calls, and byte load/store operations, CellExec-1 now provides the bounded operations required for 64-bit pointer loads, division and modulo, comparisons, dynamic string/character output, and the initial C runtime primitives used by compiled programs. The purpose remains a verified program ABI and execution boundary rather than unrestricted native-code execution.
@@ -577,7 +577,7 @@ The repository currently establishes the following Cortex and native-programming
 
 The important result is no longer only that CellLM-1M can run natively. Cell OS now joins learned semantic mediation, deterministic capabilities, persistent storage, a verified executable format, a task process ABI, and a native C compilation path in one bootable system. C source entered at the `cell$` prompt can become a persistent verified program and execute without Linux, libc, GCC, Python, or another conventional operating system existing beneath the target runtime.
 
-That does not make Cell OS self-hosting yet. It does establish the substrate needed to pursue self-hosting as an engineering problem rather than as a hypothetical future architecture.
+The bootstrap compiler now reaches deterministic self-hosting: a compiler running as a CellExec task reproduces the same compiler source to a byte-identical installed stage2/stage3 fixed point. This claim is deliberately limited to the bootstrap compiler and its supported C subset, not a complete ISO C implementation.
 
 ## Validated Interactive Milestone
 
@@ -687,43 +687,58 @@ The task history demonstrates that the compiler command and the program it creat
 
 The low-level `tools/cellasm.py` assembler remains a bootstrap, debugging, and backend-development tool. It is not the intended user programming language. The source-level direction is C, and the scripting direction is POSIX shell.
 
-## User-Space Compiler Bootstrap
+## Self-Hosting Compiler Bootstrap
 
-The first compiler implementation code now also exists on the far side of the CellExec process boundary. `programs/cc.stage1.c` is compiled into `/programs/cc.stage1` and runs as an ordinary verified CellExec task. Unlike the normal `/programs/cc` compatibility wrapper, this bootstrap compiler does not invoke the trusted `compile` syscall. It reads C source through ordinary file descriptors, recognizes its current bootstrap language directly in user space, emits CellExec instructions and data into a candidate executable image, and writes that candidate under `/home`.
+The compiler implementation now exists on the far side of the CellExec process boundary and reaches a deterministic self-hosting fixed point. `programs/cc.stage1.c` is compiled by the trusted bootstrap compiler into `/programs/cc.stage1`. That stage runs as an ordinary verified CellExec task, reads C source through normal descriptors, performs lexical analysis, parsing and CellExec emission in user space, and does not invoke the trusted `compile` syscall.
 
-The trusted target retains one deliberately narrower operation, `install_exec`. That service is available only when the executing path is exactly `/programs/cc.stage1`. It accepts a candidate image only from `/home`, recomputes the CellExec payload CRC, submits the image to the normal CellExec verifier, and writes the image under `/programs` only after successful verification. An unrelated task receives `EACCES`. The service therefore owns executable admission, not C parsing or code generation.
+The executable-admission boundary remains intentionally smaller than the compiler. `install_exec` is available only to the bootstrap admission path at `/programs/cc.stage1`. It accepts a candidate only from `/home`, computes the CellExec payload CRC, submits the image to the normal CellExec verifier, and installs it under `/programs` only after verification succeeds. A self-hosted later stage does not inherit this privilege. This keeps C parsing and code generation outside the trusted kernel while retaining one bounded executable-admission gate.
 
-The current stage1 compiler is intentionally small. Its accepted input is limited to a `main` body containing string-literal `puts`, integer `putchar`, and integer `return` statements, with comments and preprocessor lines skipped. This surface is enough to establish that C-to-CellExec code generation itself can execute in user space without pretending that the full bootstrap compiler has already crossed the boundary.
-
-The current bounded configuration gives CellExec tasks up to 16 KiB of memory and raises the bootstrap compiler code-generation ceiling to 1,900 instructions while retaining the 16 KiB CellExec and CellFS file-size limit. The current bootstrap build produces a 14,948-byte `cc.stage1` image with 1,844 CellExec instructions. It contains no `CELL_EXEC_SYS_COMPILE` instruction and one `CELL_EXEC_SYS_INSTALL_EXEC` boundary call.
-
-The intended proof path is now concrete:
+The bootstrap loop is:
 
 ```text
-C source in /home
+host/bootstrap compiler
         |
         v
 /programs/cc.stage1
-  CellExec task
         |
+        | compiles programs/cc.stage1.c
         v
-user-space parse + CellExec emission
+/programs/cc.stage2
         |
+        | compiles the identical source with --emit
         v
-candidate image in /home
+/home/cc.stage3.cellx
         |
+        | CRC + verifier admission by cc.stage1
         v
-install_exec
- CRC + verifier only
-        |
-        v
-/programs executable
-        |
-        v
-normal CellExec task execution
+/programs/cc.stage3
 ```
 
-This is not self-hosting yet. The stage1 implementation is written in a broader subset than stage1 itself currently accepts, so it cannot yet compile its own source. The next compiler work is therefore demand-driven: move enough lexical, expression, declaration, function, pointer, and data-layout support into the user-space compiler for `cc.stage1` to reproduce the next compiler stage. The trusted `/programs/cc` path remains available while that migration proceeds.
+The fixed-point condition is evaluated after both images have passed the same executable-admission normalization. A raw emitted candidate carries an unfinished CRC field by design; comparing it directly with an installed executable would compare different representation states rather than compiler output semantics. After admission:
+
+```text
+cc.stage2 = 68,440 bytes
+cc.stage3 = 68,440 bytes
+
+sha256(cc.stage2) == sha256(cc.stage3)
+```
+
+The regression also proves that `cc.stage2` cannot call `install_exec` successfully, then uses the self-hosted compiler to emit an independent C program, admits that program through the bootstrap verifier boundary, and executes it through the ordinary CellExec task path.
+
+The self-hosting work required several bounded compiler/runtime expansions rather than an unrestricted language or execution model. The current relevant ceilings are:
+
+```text
+compiler source unit      32 KiB
+compiler code             16,000 instructions
+CellExec task memory      256 KiB
+CellExec executable       128 KiB
+CellFS file               128 KiB
+CellExec gas              50,000,000
+```
+
+Two compiler defects were exposed and repaired by the self-compile rather than hidden by a special case. First, the earlier internal code-generation ceiling was too small for the compiler itself. Second, nested calls shared one argument-descriptor buffer, so an inner call could overwrite the pending arguments of an outer call. Argument descriptors are now nesting-safe, which is required for deterministic self-reproduction.
+
+This is a self-hosting bootstrap compiler, not a claim of complete ISO C conformance. The supported language remains intentionally demand-driven and bounded. The important result is that the compiler source can now be consumed by a compiler running inside CellExec and reproduced to a stable executable fixed point without using the trusted compile service for parsing or code generation.
 
 ## C Process Runtime and Real Program Arguments
 
@@ -913,7 +928,7 @@ A human can boot Cell OS, create a C source file, invoke `cc` from the Cell OS p
 
 There is deliberately no Linux userspace underneath this path. The target does not call GCC, Clang, Python, PyTorch, llama.cpp, GGML, or a host libc to compile and execute the program after boot. The compiler frontend, VFS, persistent filesystem, executable verifier, task runtime, capability dispatcher, transformer inference engine, and shell integration are Cell OS components.
 
-The next major boundary is self-hosting. The normal `cc` command already runs as `/programs/cc`, and the first independent compiler backend now runs as `/programs/cc.stage1`, where source recognition and CellExec emission happen inside an ordinary CellExec task. The remaining work is to expand that user-space compiler until it can compile its own implementation and reproduce a subsequent stage without relying on the trusted compile service.
+The compiler bootstrap boundary is now closed: the user-space compiler reproduces its own source to a byte-stable stage2/stage3 fixed point. The next compiler work is consolidation: make the self-hosted compiler the primary target-side compiler path, reduce or remove the older trusted compatibility compile service, and continue growing the self-hosted C surface only where real Cell OS programs require it.
 
 ## What Is Not Yet Demonstrated
 
@@ -932,8 +947,8 @@ The current work remains deliberately narrower than the long-term architecture.
 - `stdin` currently has EOF-only semantics; interactive task input and blocking descriptor I/O are not implemented yet.
 - The current allocator is a bounded task-local allocator with eight tracked blocks, not a general heap with coalescing or virtual memory.
 - File writes from ordinary compiled tasks are currently restricted to `/home`; a broader permissions and executable-installation model is future work.
-- The normal target `cc` command still uses the trusted compiler core through its bounded compatibility service; `/programs/cc.stage1` demonstrates independent user-space code generation but currently accepts only a deliberately small bootstrap subset.
-- The user-space compiler does not yet compile its own source inside Cell OS, so the system is not self-hosting.
+- The legacy target `cc` compatibility path still exists and uses the trusted compiler core; the self-hosted bootstrap compiler is separate until the compatibility path is deliberately retired.
+- The self-hosting result applies to the bootstrap compiler and its supported C subset. It is not a claim of complete ISO C conformance, a full libc, object files, a conventional linker, or arbitrary third-party C portability.
 - `/proc`, `/dev`, and `/sys` are intentionally compact Cell-native projections rather than Linux ABI replicas. There is no `opendir`/`readdir` C API yet, no symlink model, and no claim that Linux software can consume these trees unchanged.
 - `/proc` currently exposes the active task and retained task-history records rather than a preemptive concurrent process universe.
 - `/dev/console` has output semantics for compiled tasks, while descriptor-based interactive input remains unimplemented.
@@ -967,41 +982,32 @@ Grow the C compiler according to the needs of real Cell OS programs and the comp
 
 The rule is demand-driven growth. Features should be added because Cell OS programs or the compiler require them, not to accumulate syntax without a system use.
 
-### Compiler Bootstrap Inside Cell OS
+### Self-Hosted Compiler Consolidation
 
-The command/process boundary is established and the first user-space code-generation stage now exists as `/programs/cc.stage1`. It reads source through the normal descriptor interface and emits CellExec candidates without invoking the trusted compile syscall. The next bootstrap work is to expand that implementation until it can consume its own source and reproduce the next stage:
+The self-hosting fixed point is established. The next compiler work is to simplify the architecture around that result:
 
-```text
-host/bootstrap compiler
-   |
-   v
-/programs/cc.stage1
-   |
-   v
-cc.stage1 running inside Cell OS
-   |
-   v
-/programs/cc.stage2
-```
+- make the self-hosted compiler the normal target-side compilation path;
+- remove the older trusted C parsing/code-generation compatibility service once recovery requirements are satisfied;
+- retain the small CRC + verifier executable-admission boundary;
+- grow the self-hosted C surface only when required by real Cell OS programs;
+- keep stage2/stage3 fixed-point reproduction as a regression requirement.
 
-The executable-admission boundary can remain small and trusted: finalize CRC, verify the candidate image, and install it. C parsing, semantic processing, and code generation should continue migrating into the compiler task. Once `cc.stage1` can build `cc.stage2`, the compatibility compile service behind `/programs/cc` can be reduced or removed.
-
-### Self-Hosting Proof
-
-Establish that the compiler can reproduce itself through the Cell OS execution environment.
-
-The strongest target is deterministic equivalence:
+The stable bootstrap relation is:
 
 ```text
-cc.c -> cc.stage1
-cc.c -> cc.stage2 using cc.stage1
+cc.stage1 source
+      |
+      v
+cc.stage1 -> cc.stage2
+cc.stage2 -> stage3 candidate
+bootstrap admission -> cc.stage3
 
-sha256(cc.stage1) == sha256(cc.stage2)
+cc.stage2 == cc.stage3
 ```
 
-If byte-for-byte identity is not immediately achievable because of explicit build metadata or layout decisions, the intermediate proof target is semantic equivalence under a pinned test corpus and executable verifier. The long-term goal remains deterministic self-reproduction.
+### Process and Userspace Expansion
 
-Beyond these stages, the existing hardware, scheduler, observability, Cortex, and proof work continues. Model growth is not the immediate priority. The near-term priority is making the operating substrate increasingly capable of building, inspecting, and reproducing itself.
+With compiler self-reproduction established, the next operating-system priorities are stronger process semantics and a broader conventional userspace: interactive descriptor input, pipes, concurrent scheduling, more complete filesystem iteration and permissions, and additional hardware backends where implementations can be verified. Model growth is not the immediate priority.
 
 ## Limitations and Future Work of the Original Cell Substrate
 

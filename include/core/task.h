@@ -12,7 +12,7 @@
 #define CELL_TASK_ARGC_MAX 16u
 #define CELL_TASK_FD_MAX 8u
 #define CELL_TASK_HEAP_BLOCKS 8u
-#define CELL_TASK_CALL_DEPTH 8u
+#define CELL_TASK_CALL_DEPTH 64u
 
 struct cell_vfs;
 typedef struct cell_vfs cell_vfs_t;

@@ -13,7 +13,7 @@
 #define CC_TEMP_LAST 15u
 #define CC_LOCALS 64u
 #define CC_GLOBALS 32u
-#define CC_FUNCS 32u
+#define CC_FUNCS 64u
 #define CC_PARAMS 8u
 #define CC_STRUCTS 16u
 #define CC_FIELDS 16u
@@ -2066,7 +2066,7 @@ int cell_cc_compile_units(const cell_cc_source_unit_t *units, size_t unit_count,
 	h->entry_pc = c->entry_pc;
 	h->capability_mask = c->capability_mask;
 	h->memory_bytes = CELL_CC_TASK_MEMORY;
-	uint64_t gas = (uint64_t)c->code_count * 128u + 1024u;
+	uint64_t gas = (uint64_t)c->code_count * 4096u + 4096u;
 	if (gas > CELL_EXEC_GAS_MAX) gas = CELL_EXEC_GAS_MAX;
 	h->gas_limit = (uint32_t)gas;
 	h->flags = CELL_EXEC_F_STATIC_MEMORY;
